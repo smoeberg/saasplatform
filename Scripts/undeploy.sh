@@ -1,14 +1,34 @@
 #!/bin/bash
-# SellYourSaaS action: undeploy — backup-dump først, derefter sletning
+# SellYourSaaS action: undeploy — slet tenant efter retention (Arkitektur §3.3)
+# Rækkefølge: DB-dump → helm uninstall → DNS → namespace (inkl. PVC) → extrafield slettes
 set -euo pipefail
-INSTANCE="${SELLYOURSAAS_INSTANCE_NAME:?}"
-NS="tenant-${INSTANCE}"
+source "$(dirname "$0")/lib.sh"
 
-# 1. Ekstern DB-dump til S3 (pr. tenant)
-kubectl -n "$NS" create job --from=cronjob/db-dump "final-dump-$(date +%s)" && kubectl -n "$NS" wait --for=condition=complete job/final-dump-$(date +%s) --timeout=15m || true
-# 2. Helm-uninstall
-helm uninstall tenant -n "$NS" || true
-# 3. Namespace-sletning (PVC'er følger med, backup findes eksternt)
-kubectl delete namespace "$NS" --wait=false
-# 4. Revoke: platformens serviceadgang til tenanten findes ikke længere (namespace væk)
-echo "undeployed $INSTANCE (backup Dump + S3 før sletning)"
+NS="$(resolve_namespace)"
+
+# 1. Fail-closed: sikkerhedskopi af DB før sletning
+if kubectl -n "$NS" get pod mariadb-0 >/dev/null 2>&1; then
+  log "tager endeligt DB-dump før sletning"
+  kubectl -n "$NS" exec mariadb-0 -- mariadb-dump -u root \
+    -p"$(kubectl -n "$NS" get secret tenant-db -o jsonpath='{.data.root_password}' | base64 -d)" \
+    --single-transaction dolibarr > "/tmp/backup-${NS}-$(date -u +%FT%TZ).sql"
+  # upload til S3 (Wasabi) — afbryd ved fejl, slet ikke tenant ved manglende backup
+  aws s3 cp "/tmp/backup-${NS}-$(date -u +%FT%TZ).sql" "s3://${SAAS_BACKUP_BUCKET}/${NS}/final-$(date -u +%FT%TZ).sql" \
+    --endpoint-url "${SAAS_S3_ENDPOINT:-https://s3.eu-central-1.wasabisys.com}" \
+    || fail "kunne ikke uploade endeligt dump — sletning afbrudt (fail-closed)"
+  rm -f "/tmp/backup-${NS}-$(date -u +%FT%TZ).sql"
+fi
+
+# 2. helm uninstall
+helm uninstall tenant -n "$NS" || log "helm-release findes ikke"
+
+# 3. DNS slettes
+dns_delete
+
+# 4. Namespace (inkl. PVC'er) slettes
+kubectl delete namespace "$NS" --wait
+
+# 5. Extrafield k8s_namespace/helm_release ryddes, så kontrakten kan genbruges (Arkitektur §3.3.1)
+set_extrafield k8s_namespace ""
+set_extrafield helm_release ""
+log "undeployed $NS"
