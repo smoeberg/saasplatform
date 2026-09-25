@@ -1,8 +1,8 @@
 # saasplatform — Arkitektur til SaaS-platform
 
-> Status: rev. 4 (2026-09-25). Besluttet model: **SellYourSaaS forbliver uændret** (frit opdaterbart), to deployment-typer i produktion fra dag ét (native + Kubernetes via package-scripts). Kubernetes-operator/CRD udskudt, indtil antallet af container-tenants vokser.
+> Status: rev. 5 (2026-09-25). Besluttet model: **SellYourSaaS forbliver uændret** (frit opdaterbart), to deployment-typer i produktion fra dag ét (native + Kubernetes via package-scripts). Kubernetes-operator/CRD udskudt, indtil antallet af container-tenants vokser.
 >
-> Rev. 4 tilføjer driftsdelen: runner-hardening, backup/restore-runbook, præciseret suspension, canary-algoritme, produktklassificering, testmatrix, escape hatch og DNS-automatisering i fase 1b.
+> Rev. 5: cert-manager/suspension simplificeret, DB-rollback-semantik for Dolibarr-opdateringer, instance↔namespace-mapping, secrets-flow, DNS-detajler og omkostningsmodel tilføjet. Egne Dolibarr-moduler (bankconnect, dk-compliance) indgår i package-definitionen.
 
 ## 1. Formål og grundidé
 
@@ -63,7 +63,7 @@ En ny package, hvor alle shell-scripts kalder K8s. Eksempel på package-felter:
 
 > **Deployment-afslutning:** `afterdeploy` efterlader et verificerbart artefakt til agenten (se også Scripts/README.md), så SellYourSaaS registrerer instansen som "deployed".
 
-- `sources`: tomt (installeres ikke på runneren — imaget findes allerede i GHCR)
+- `sources`: **vores egne Dolibarr-moduler** (fx dolibarr-bankconnect, dolibarr-dk-compliance) og custom-config-templates — pakket ind i imaget via CI eller leveret via `config-templates` i package-definitionen. Egen kode = ikke GPL-smittet (se §6). Selve sources installerer IKKE på runneren (imaget findes allerede i GHCR); modulerne indgår i image-buildet.
 - `afterdeploy`: script, der kører `helm upgrade --install tenant-$INSTANCE {chart}` med `-f` pr. instans
 - `afterundeploy`: `helm uninstall tenant-$INSTANCE; kubectl delete ns tenant-$INSTANCE`
 - `aftersuspend`: `kubectl scale --replicas=0 deploy/... -n tenant-$INSTANCE` + Ingress → "suspended"-vhost
@@ -88,7 +88,7 @@ En ny package, hvor alle shell-scripts kalder K8s. Eksempel på package-felter:
 - Workloads (Deployments + StatefulSets) skaleres til 0; **PVC'er bevares**.
 - **CronJobs slettes** (ikke skaleres) — Helm-chartet genskaber dem ved unsuspend (deklarativt, `helm upgrade --reuse-values`).
 - Event-/job-køer: suspenderes sammen med workloads (ingen pods → ingen forbrugere; kø er DB-baseret og følger tenant-DB'en).
-- **cert-manager**: suspenderet Ingress kan bryde HTTP-01-fornyelse. Derfor: suspenderet Ingress bevarer en minimal ACM E-rute til `/.well-known/acme-challenge/` — certifikater fornyes under suspension; hvis det alligevel mislykkes, fornyes ved unsuspend (accepteret, op til 90 dages udløb).
+- **cert-manager**: ingen særbehandling. cert-manager's HTTP-01-solver opretter sin egen midlertidige pod + service + Ingress-regel og er ikke afhængig af tenantens app-pods — fornyelse virker, så længe Ingress-ressourcen og cert-manager lever. Verificeres eksplicit i fase 1b (test: suspender tenant → forvent fuldført fornyelse); hvis testen fejler, genindføres en minimal ACME-rute som kompensationslogik.
 - **Retention-tælling**: 90 dage tæller **fra suspension** (ikke fra opsigelse). Varsling til kunden sker fra kundecenteret (SellYourSaaS' dunning-e-mails), retention er en plan-parameter.
 
 **Backup (præciseret):**
@@ -109,6 +109,30 @@ En ny package, hvor alle shell-scripts kalder K8s. Eksempel på package-felter:
 - **Heartbeat**: runneren skriver et timestamp (cron, hvert 5. min.) tilbage til SellYourSaaS (via en simpel HTTP-endepunkt eller `refresh`-liggende call). Udeblivelse → alarm i SellYourSaaS' supervision.
 - **Fail-closed ved runner-nedbrud**: remote actions fejler synligt i SellYourSaaS (agentens fejlrappportering); genoptagelse = re-kør action (alle scripts er idempotente).
 - **Skalering**: én runner pr. K8s-cluster fra start; aktiv/passiv-tilføjelse kan ske senere uden migrering (SellYourSaaS tillader flere deployment-servere).
+
+### 3.3.1 Instance↔namespace-mapping og secrets-flow
+
+**Mapping (eksplicit, stabilt):**
+- `k8s_namespace` og `helm_release` gemmes som **extrafields på Dolibarr-kontrakten** ved første deploy.
+- Scripts er **deterministiske ud fra extrafieldet** (ikke ud fra contract-id alene): `NS=$(extraparam k8s_namespace)`.
+- **Gen-deploy efter undeploy**: samme kontrakt → samme namespace-navn (extrafieldet genbruges). Navnekollision er umulig, medmindre kontrakten genbruges — og i så fald er det samme tenant (accepteret).
+
+**Secrets-flow (fase 1):**
+1. Runneren genererer secrets lokalt (DB-password, app-secrets) ved første deploy.
+2. SealedSecret oprettes via `kubeseal` og apply'es — **klartekst slettes straks** (genereres aldrig gemt på runneren).
+3. Password-reset fra SellYourSaaS-admin: runner genererer ny secret → ny SealedSecret → `helm upgrade` → restart af pod.
+
+### 3.3.2 Omkostningsmodel pr. Dolibarr-tenant (estimat, fase 1)
+
+| Komponent | Estimat pr. tenant/måned |
+|---|---|
+| k3s-node-andel (CPU/RAM) | ~3-5 USD |
+| MariaDB StatefulSet (PVC + RAM) | ~3-6 USD |
+| Backup-lagring (S3, 7/30 dage) | ~0,5-2 USD |
+| Runner (delt, ~20 USD pr. ~100 tenants) | ~0,2 USD |
+| **I alt** | **~7-13 USD pr. tenant** |
+
+Ved >50 tenants: overvej dedikeret MariaDB-operator eller (ved Postgres-skift) CloudNativePG for ensartet backup/restore. Ved >100: revurder delt DB med schema-isolation.
 
 ### 3.4 Dataplane: PIM og andre lavrisiko-apps
 
@@ -134,7 +158,12 @@ Køres på **standard SellYourSaaS native deployment-servere** (Unix-bruger + ch
   - Inden for hvert stratum: tenants sorteres pr. kontrakt-id; **rotationsindeks gemmes i Dolibarr** (fx i en extrafield); næste canary = indeks mod N, derefter indeks+1 osv.
   - Med 10 tenants og 5–10 % canary er der reelt 1 tenant pr. gang — rotationen sikrer, at alle gennemgår canary over tid (ingen kunde er permanent "kanin").
   - **Opt-out er en plan-parameter**: premium-kunder kan fravælge canary (de rammes kun af promoted-versioner).
-- Fail-closed; rollback pr. tenant (sæt tidligere version i package/contract og re-apply).
+- Fail-closed; rollback pr. tenant.
+- **Rollback af Dolibarr-opdateringer (vigtig undtagelse)**: for Dolibarr-tenants er en opdatering ofte en **DB-migrering**, ikke kun et nyt image. Derfor:
+  1. **DB-snapshot tages lige før migrering** (adskilt fra natlig backup) — køres af deploy-scriptet for Dolibarr-pakken (fx `mysqldump --single-transaction` → S3, tag `pre-migration-{version}`).
+  2. Hvis opdateringen fejler **efter** migrering: rollback = gendan pre-migration-snapshot + sæt tidligere image-version. Ingen automatisk migration-down (Dolibarr understøtter det ikke sikkert).
+  3. Canary-logikken gælder dermed kun for *image-udrulning*; DB-migrerende versioner rulles med snapshot-sikkerhed i stedet — og med kortere canary-vindue.
+  4. Testet i fase 1b: opdater med migrering → fejlsimulér efter migrering → gendan snapshot + tidligere version → verificér funktionalitet.
 - Native apps opdateres via SellYourSaaS' indbyggede `master_redeploy_instances`-mønster (batch + canary).
 
 ### 3.6 Observability og skaleringsmål
@@ -165,9 +194,9 @@ Køres på **standard SellYourSaaS native deployment-servere** (Unix-bruger + ch
 
 **Fase 1b — K8s-integration (uge 3–6)**
 4. Sæt k3s-cluster op (Traefik, cert-manager, sealed-secrets) + K8s-runner (VM, §3.7) med kubectl/helm/kubeconfig.
-5. Byg "kubernetes"-package til Dolibarr: Helm-chart (namespace, DB, Ingress, cert-manager) + 8 shell-scripts til de 8 remote actions.
-6. **DNS-automatisering allerede her** (DNS-provider-API i deploy-scriptet) — ellers er "end-to-end" ikke reelt end-to-end. Hvis ikke, dokumenteres manuel DNS eksplicit som fase-1b-begrænsning.
-7. Verificér flowet end-to-end: ny testkunde → Helm-deploy → fakturering → suspension → undeploy.
+5. Byg "kubernetes"-package til Dolibarr: Helm-chart (namespace, DB, Ingress, cert-manager) + 8 shell-scripts til de 8 remote actions. Indbyggede Dolibarr-moduler (bankconnect, dk-compliance) med i image-buildet.
+6. **DNS-automatisering allerede her** — provider besluttes (Cloudflare / Route53); deploy-scriptet: opret A/CNAME-record, vent på propagation (TTL 300, max 10 min.) før health-check; undeploy-scriptet: slet record automatisk. Wildcard-record forstagedomæne (`*.kunder.saasplatform.dk`) vurderes i fase 2.
+7. Verificér flowet end-to-end: ny testkunde → Helm-deploy → fakturering → suspension → undeploy. Test også: **cert-manager-fornyelse under suspension** (verificerer at ingen kompensationslogik er nødvendig, se §3.3) og **rollback efter fejlet migrering** (se §3.5).
 8. **Testet restore af én tenant** (runbook §3.3) — exit-kriterium for fase 1b.
 
 **Fase 2 — produktion (uge 6–12)**
@@ -182,7 +211,7 @@ Køres på **standard SellYourSaaS native deployment-servere** (Unix-bruger + ch
 | Fase | Scenarier | Exit-kriterium |
 |---|---|---|
 | 1a | Registrering, betaling (godkendt + afvist kort), deploy, suspension, unsuspend, opsigelse, gen-deploy | 10 fulde gennemløb; 2 med fejl-injektion (betaling fejler midt i deploy → tenant-tilstand korrekt) |
-| 1b | K8s-deploy, suspension (skala-til-0 + PVC bevaret), unsuspend, opdatering (ny version), rollback, undeploy, **restore af én tenant** | 10 gennemløb pr. scenarium; restore-test dokumenteret i runbook |
+| 1b | K8s-deploy, suspension (skala-til-0 + PVC bevaret), unsuspend, opdatering (ny version), rollback, undeploy, **restore af én tenant**, cert-fornyelse under suspension, rollback efter fejlet DB-migrering | 10 gennemløb pr. scenarium; restore-test dokumenteret i runbook; secrets-flow verificeret (klartekst slettes straks) |
 | 2 | Canary-rollout (stratificeret + rotation), DNS-automatik, backup/restore pr. plan (standard + premium) | Canary gennemført med realt billeder; restore-test pr. plan |
 | 3 | Belastning ved 100+ tenants; failing tenant-isolation (NetworkPolicy-verifikation) | Ingen cross-tenant-adgang (netværkstest) |
 
