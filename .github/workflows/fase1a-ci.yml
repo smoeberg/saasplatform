@@ -1,0 +1,94 @@
+name: Fase 1a - Native Deployment Tests
+
+on:
+  push:
+    paths:
+      - 'Scripts/native/**'
+      - 'Packages/pim-native*'
+      - 'Infrastructure/native/**'
+      - 'CI/test-fase1a.sh'
+      - '.github/workflows/fase1a-ci.yml'
+  pull_request:
+    paths:
+      - 'Scripts/native/**'
+      - 'Packages/pim-native*'
+      - 'Infrastructure/native/**'
+      - 'CI/test-fase1a.sh'
+      - '.github/workflows/fase1a-ci.yml'
+  workflow_dispatch:
+    inputs:
+      run-tests:
+        description: 'Run fase 1a tests'
+        required: true
+        default: 'true'
+
+jobs:
+  native-deployment-test:
+    runs-on: [self-hosted, native-server]
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq
+
+      - name: Setup native deployment environment
+        run: |
+          # Opret mapper
+          sudo mkdir -p /opt/sellyoursaas/scripts/native
+          sudo mkdir -p /var/lib/sellyoursaas/status
+          sudo mkdir -p /var/log/sellyoursaas
+          
+          # Kopier scripts
+          sudo cp -r Scripts/native/* /opt/sellyoursaas/scripts/native/
+          sudo chmod +x /opt/sellyoursaas/scripts/native/*.sh
+          sudo chown -R sellyoursaas:sellyoursaas /opt/sellyoursaas/scripts/native
+          
+          # Start Apache og PHP-FPM (hvis ikke allerede kørende)
+          sudo systemctl start apache2 || true
+          sudo systemctl start php8.2-fpm || true
+
+      - name: Run fase 1a tests
+        run: |
+          # Kør tests
+          sudo SELLYOURSAAS_DB_ROOT_PASSWORD="${{ secrets.DB_ROOT_PASSWORD }}" \
+            ./CI/test-fase1a.sh
+
+  native-syntax-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Lint native scripts
+        run: |
+          # Tjek alle native scripts
+          find Scripts/native -name "*.sh" -exec shellcheck {} \;
+
+  native-documentation-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check documentation
+        run: |
+          # Tjek at dokumentation findes
+          test -f Infrastructure/native/README.md
+          test -f Packages/pim-native.yaml
+          test -f Packages/pim-native/README.md
+          test -f Docs/Fase1a/README.md
+          test -f CI/test-fase1a.sh

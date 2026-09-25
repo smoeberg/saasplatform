@@ -1,0 +1,222 @@
+# Package-definition: PIM for Native Deployment (SellYourSaaS package)
+# Denne fil er kontrakten mellem SellYourSaaS og den native deployment-server.
+# 
+# Type: native (Unix-bruger + chroot + FPM + Apache-vhost)
+# Brug: PIM, kataloger, markedsfringsvrktjer (ingen persondata)
+# Omkostning: <0,50 USD/instans
+
+package:
+  name: "pim-native"
+  type: native              # deployment-server type: native (Unix + chroot + FPM)
+  version: 1
+  description: "PIM application for native deployment (low-risk, no personal data)"
+
+# SellYourSaaS remote actions (agent -> deployment-server via SSH)
+# Alle scripts skal vre i Scripts/native/ og have execute permissions
+remote_actions:
+  beforedeploy:    "/opt/sellyoursaas/scripts/native/beforedeploy.sh"
+  afterdeploy:     "/opt/sellyoursaas/scripts/native/afterdeploy.sh"
+  beforeundeploy:  "/opt/sellyoursaas/scripts/native/beforeundeploy.sh"
+  afterundeploy:   "/opt/sellyoursaas/scripts/native/undeploy.sh"
+  aftersuspend:    "/opt/sellyoursaas/scripts/native/aftersuspend.sh"
+  beforeunsuspend: "/opt/sellyoursaas/scripts/native/beforeunsuspend.sh"
+  afterunsuspend:  "/opt/sellyoursaas/scripts/native/afterunsuspend.sh"
+  refresh:         "/opt/sellyoursaas/scripts/native/refresh.sh"
+  recreateauthorizedkeys: "/opt/sellyoursaas/scripts/native/recreateauthorizedkeys.sh"
+  # cron: hndteres af deployment-server cron
+
+# Sources (PIM application)
+sources:
+  git_repository: "https://github.com/smoeberg/pim-app.git"
+  git_branch: "main"
+  git_directory: "/"
+  # For native deployment: sources kopieres til brugerens home directory
+  deploy_path: "/home/{INSTANCE}/public_html"
+
+# Config templates
+config_templates:
+  # Main application config
+  main:
+    source: "templates/pim-config.php"
+    target: "config.php"
+    
+  # Database config
+  database:
+    source: "templates/pim-db-config.php"
+    target: "db-config.php"
+    
+  # Apache vhost (hndteres af deploy.sh)
+  apache:
+    source: "templates/pim-apache.conf"
+    target: "/etc/apache2/sites-available/{INSTANCE}.conf"
+    
+  # PHP-FPM pool (hndteres af deploy.sh)
+  php-fpm:
+    source: "templates/pim-fpm-pool.conf"
+    target: "/etc/php/8.2/fpm/pool.d/{INSTANCE}.conf"
+
+# Cron templates
+cron_templates:
+  hourly:
+    source: "templates/pim-cron-hourly.sh"
+    target: "/home/{INSTANCE}/cron-hourly.sh"
+    schedule: "0 * * * *"
+    
+  daily:
+    source: "templates/pim-cron-daily.sh"
+    target: "/home/{INSTANCE}/cron-daily.sh"
+    schedule: "0 3 * * *"
+
+# Environment variabler (tilgngelige for scripts)
+environment:
+  # Standard paths
+  APACHE_SITES_AVAILABLE: "/etc/apache2/sites-available"
+  APACHE_SITES_ENABLED: "/etc/apache2/sites-enabled"
+  PHP_FPM_POOL_DIR: "/etc/php/8.2/fpm/pool.d"
+  CHROOT_BASE: "/var/www/chroot"
+  USER_HOME_BASE: "/home"
+  
+  # Status directory
+  STATUS_DIR: "/var/lib/saasplatform/status"
+  
+  # Log directories
+  APACHE_LOG_DIR: "/var/log/apache2"
+  PHP_FPM_LOG_DIR: "/var/log/php8.2-fpm"
+
+# Database configuration
+database:
+  type: mariadb
+  host: "localhost"
+  port: 3306
+  # Database navne genereres automatisk: pim_{INSTANCE}
+  prefix: "pim_"
+
+# Resource limits (native deployment)
+limits:
+  max_users_per_server: 1000        # Maksimal 1000 tenants pr. server
+  max_cpu_per_tenant: 0.5           # 50% CPU pr. tenant (deling)
+  max_memory_per_tenant: 512Mi     # 512MB RAM pr. tenant
+  max_storage_per_tenant: 1Gi      # 1GB storage pr. tenant
+
+# Quotas
+quotas:
+  # Apache
+  max_connections: 100
+  max_requests_per_second: 100
+  
+  # PHP
+  max_execution_time: 30
+  max_memory_limit: 256M
+  max_upload_size: 10M
+  
+  # System
+  max_processes: 50
+  max_open_files: 1024
+
+# Backup configuration
+backup:
+  enabled: true
+  type: filesystem
+  path: "/backup/native-tenants"
+  retention_days: 7
+  schedule: "0 2 * * *"  # Kl. 02:00
+
+# Monitoring
+monitoring:
+  healthz_endpoint: "/healthz"
+  healthz_interval: 60        # Sekunder
+  healthz_timeout: 5         # Sekunder
+
+# Security
+security:
+  chroot_enabled: true
+  separate_users: true
+  separate_fpm_pools: true
+  disable_dangerous_functions: true
+  
+  # Firewall
+  allowed_ports: [80, 443]
+  allowed_ips: []            # Tom = alle IPs (konfigurer i produktion)
+
+# Planer (pricing tiers)
+plans:
+  standard:
+    name: "PIM Standard"
+    price: 99.00
+    currency: DKK
+    billing_cycle: monthly
+    
+    features:
+      - "1GB Storage"
+      - "50GB Bandwidth/month"
+      - "1000 requests/day"
+      - "7 days backup retention"
+      
+    limits:
+      max_storage: 1Gi
+      max_bandwidth: 50Gi
+      max_requests: 1000
+      
+    # SellYourSaaS options
+    options:
+      - name: "extra_storage"
+        type: quantity
+        value: 0
+        max: 10
+        price_per_unit: 50.00
+        
+      - name: "extra_bandwidth"
+        type: quantity
+        value: 0
+        max: 100
+        price_per_unit: 100.00
+
+  professional:
+    name: "PIM Professional"
+    price: 299.00
+    currency: DKK
+    billing_cycle: monthly
+    
+    features:
+      - "5GB Storage"
+      - "200GB Bandwidth/month"
+      - "5000 requests/day"
+      - "30 days backup retention"
+      - "Priority support"
+      
+    limits:
+      max_storage: 5Gi
+      max_bandwidth: 200Gi
+      max_requests: 5000
+      
+    options:
+      - name: "extra_storage"
+        type: quantity
+        value: 0
+        max: 50
+        price_per_unit: 50.00
+        
+      - name: "extra_bandwidth"
+        type: quantity
+        value: 0
+        max: 500
+        price_per_unit: 100.00
+
+# Metadata
+metadata:
+  author: "saasplatform"
+  created: "2026-09-25"
+  updated: "2026-09-25"
+  version: "1.0.0"
+  
+  # Klassificering
+  risk_level: low          # Ingen persondata
+  isolation_level: medium  # Unix-bruger + chroot
+  
+  # Tags
+  tags:
+    - pim
+    - catalog
+    - marketing
+    - low-risk
+    - native
