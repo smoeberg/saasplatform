@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dolibarr
+  labels: {app: dolibarr, tenant: {{ .Values.instance | quote }}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: dolibarr}}
+  template:
+    metadata:
+      labels: {app: dolibarr, tenant: {{ .Values.instance | quote }}}
+    spec:
+      containers:
+        - name: dolibarr
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports: [{containerPort: 80}]
+          env:
+            - name: DOLI_DB_HOST
+              value: "{{ .Release.Name }}-mariadb"
+            - name: DOLI_DB_NAME
+              value: dolibarr
+            - name: DOLI_DB_USER
+              valueFrom: {secretKeyRef: {name: tenant-db, key: username}}
+            - name: DOLI_DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: tenant-db, key: password}}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 80}
+            initialDelaySeconds: 20
+          resources:
+{{ toYaml .Values.dolibarr.resources | indent 12 }}
+          volumeMounts:
+            - name: documents
+              mountPath: /var/www/dolibarr/documents
+      volumes:
+        - name: documents
+          persistentVolumeClaim: {claimName: documents}
