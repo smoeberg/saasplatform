@@ -1,0 +1,58 @@
+name: scripts-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup k3d
+        uses: nolar/setup-k3d-k3s@v1
+        with:
+          cluster-name: saas-test
+          k3s-args: "--disable traefik"
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq
+          # Install yq
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Setup MinIO (S3 mock)
+        run: |
+          docker run -d -p 9000:9000 -p 9001:9001 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            --name minio \
+            quay.io/minio/minio server /data --console-address ":9001"
+          sleep 10
+          # Opret bucket
+          curl -X PUT http://localhost:9000/minioadmin/saasplatform-backups \
+            -H "Host: localhost:9000" || true
+          curl -X PUT http://localhost:9000/minioadmin/pre-migration-backups \
+            -H "Host: localhost:9000" || true
+
+      - name: Run CI tests
+        env:
+          S3_ENDPOINT: "http://localhost:9000"
+          S3_BUCKET: "saasplatform-backups"
+          S3_ACCESS_KEY: "minioadmin"
+          S3_SECRET_KEY: "minioadmin"
+        run: |
+          # Vent på clusteret er klar
+          sleep 10
+          ./CI/run-tests.sh

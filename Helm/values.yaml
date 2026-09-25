@@ -5,10 +5,17 @@ suspended: false
 image:
   repository: ghcr.io/smoeberg/dolibarr
   tag: "23.0.1"
+  # For rollback: tidligere version til gendannelse
+  previousTag: ""
 dolibarr:
   resources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {cpu: "2", memory: 1Gi}
+  # Migration settings
+  migration:
+    enabled: false
+    # Pre-migration snapshot tag (genereres automatisk)
+    preMigrationSnapshot: ""
 db:
   enabled: true
   storage: 5Gi
@@ -27,6 +34,11 @@ backup:
   schedule: "0 3 * * *"
   s3Enabled: false
   bucket: ""
+  # Pre-migration snapshots gemmes separat
+  preMigration:
+    enabled: true
+    s3Enabled: true
+    bucket: "pre-migration-backups"
 quota:
   requestsCpu: "1"
   requestsMemory: 2Gi
@@ -37,3 +49,9 @@ networkPolicy:
   defaultDeny: true
   # egress tilladelser (mail, DNS, opdateringer)
   egressMail: true
+
+# Rollback settings
+rollback:
+  enabled: false
+  targetVersion: ""
+  restoreFromSnapshot: ""

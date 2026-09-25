@@ -277,3 +277,46 @@ resolve_namespace() {
   # For nu: brug standard mapping
   echo "tenant-${INSTANCE}"
 }
+
+# ---- Migration helpers ----
+check_migration_required() {
+  # Tjek om den nye version kræver DB-migrering
+  local new_version="$1"
+  local current_version=$(helm get values "$RELEASE" -n "$NAMESPACE" -o json 2>/dev/null | jq -r '.image.tag // ""' || echo "")
+  
+  if [[ "$new_version" == "$current_version" ]]; then
+    return 1  # Ingen migrering nødvendig
+  fi
+  
+  # Tjek om versionerne indikerer en migrering
+  # (Dolibarr major/minor version ændring)
+  local new_major=$(echo "$new_version" | cut -d. -f1)
+  local new_minor=$(echo "$new_version" | cut -d. -f2)
+  local current_major=$(echo "$current_version" | cut -d. -f1)
+  local current_minor=$(echo "$current_version" | cut -d. -f2)
+  
+  if [[ "$new_major" != "$current_major" || "$new_minor" != "$current_minor" ]]; then
+    return 0  # Migrering nødvendig
+  fi
+  
+  return 1  # Ingen migrering
+}
+
+get_pre_migration_snapshot() {
+  # Hent seneste pre-migration snapshot for denne tenant
+  local ns="$1"
+  local prefix="pre-migration-backups/${ns}/pre-migration"
+  
+  if [[ -z "$S3_ENDPOINT" || -z "$S3_BUCKET" ]]; then
+    echo ""
+    return 1
+  fi
+  
+  # List filer i S3 (simplificeret - i praksis brug AWS CLI eller lignende)
+  # For nu: returner det der står i values-filen
+  if [[ -f "$VALUES_FILE" ]]; then
+    yq eval '.dolibarr.migration.preMigrationSnapshot // ""' "$VALUES_FILE"
+  else
+    echo ""
+  fi
+}
