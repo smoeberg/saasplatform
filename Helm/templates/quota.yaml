@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata: {name: default}
+spec:
+  hard:
+    requests.cpu: {{ .Values.quota.requestsCpu }}
+    requests.memory: {{ .Values.quota.requestsMemory }}
+    limits.cpu: {{ .Values.quota.limitsCpu }}
+    limits.memory: {{ .Values.quota.limitsMemory }}
+    persistentvolumeclaims: {{ .Values.quota.pvc }}
