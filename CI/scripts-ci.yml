@@ -1,0 +1,11 @@
+# .github/workflows/scripts-ci.yml (placér i repo-roden)
+name: scripts-ci
+on: [push, pull_request]
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nolar/setup-k3d-k3s@v1
+      - uses: azure/setup-helm@v4
+      - run: ./ci/run-tests.sh
