@@ -1,0 +1,46 @@
+# Package-definition: Dolibarr på Kubernetes (SellYourSaaS "package" af typen kubernetes)
+# Denne fil er KONTRAKTEN mellem Dolibarr (packages skabes her af admin) og K8s-runneren.
+# Status i Dolibarr: Denne fil er den autoritative reference, men den skal indtastes
+# i SellYourSaaS admin ("Deployment Servers & Packages") — SellYourSaaS gemmer definitionen
+# i sin DB; denne fil versionsstyrer den. Ændringer her = ændringer i master-admin.
+
+package:
+  name: "kubernetes-dolibarr"
+  type: kubernetes         # deployment-server type: K8s-runner med helm/kubectl
+  version: 1
+
+# SellYourSaaS remote actions (agent → runner via SSH):
+# Læs mere i Docs/Arkitektur.md §3.2. Scripts ligger i Scripts/.
+actions:
+  deploy:                  "Scripts/deploy.sh"
+  undeploy:                "Scripts/undeploy.sh"
+  suspend:                 "Scripts/suspend.sh"
+  unsuspend:               "Scripts/unsuspend.sh"
+  refresh:                 "Scripts/refresh.sh"
+  recreateauthorizedkeys:  "Scripts/recreateauthorizedkeys.sh"
+
+# Environment, der sættes af SellYourSaaS-agenten (ref: SellYourSaaS docs):
+env:
+  SELLYOURSAAS_INSTANCE_NAME:      "<instance-name>"
+  SELLYOURSAAS_DOLIBARRINSTANCE_URL: "<https://tenant.kunder.saasplatform.dk>"
+  SELLYOURSAAS_CONTRACT_ID:        "<contract-id>"
+  SELLYOURSAAS_VERSION:            "<package-version → image-tag>"
+  SAAS_CHART_DIR:                  "/opt/saasplatform/Helm"
+  # Runner-cred: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONE_ID, CLOUDFLARE_INGRESS_IP,
+  # SAAS_BACKUP_BUCKET, SAAS_S3_ENDPOINT (Wasabi), SELLYOURSAAS_EXTRAFIELD_API + _TOKEN
+
+# Kontraktens extrafields (sættes ved første deploy af lib.sh, Arkitektur §3.3.1):
+extrafields:
+  k8s_namespace: ""   # genereres: tenant-{contract-id}; slettes ved undeploy
+  helm_release: ""    # fast: "tenant"
+
+# Felter pr. plan (sættes i SellYourSaaS "Options"):
+plans:
+  standard:
+    quota: {requests.cpu: "1", requests.memory: 2Gi, limits.cpu: "2", limits.memory: 4Gi}
+    db.storage: 5Gi
+    backup.retention_days: 7
+  premium:
+    quota: {requests.cpu: "2", requests.memory: 4Gi, limits.cpu: "4", limits.memory: 8Gi}
+    db.storage: 20Gi
+    backup.retention_days: 30
