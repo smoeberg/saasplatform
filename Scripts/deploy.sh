@@ -1,34 +1,24 @@
 #!/bin/bash
 # SellYourSaaS action: deploy (også deployall via loop i master)
+# Arkitektur §3.3.1 (mapping+secrets), §5 fase 1b (DNS)
 set -euo pipefail
-INSTANCE="${SELLYOURSAAS_INSTANCE_NAME:?}"
-NS="tenant-${INSTANCE}"
+source "$(dirname "$0")/lib.sh"
+
+NS="$(resolve_namespace)"
 CHART="${SAAS_CHART_DIR:?}/dolibarr"
-VERSION="${SELLYOURSAAS_VERSION:?}"   # image-tag, styret af package-version
+VERSION="${SELLYOURSAAS_VERSION:?}"   # image-tag = package-version (Arkitektur §3.5)
 
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n "$NS" apply -f - <<YAML
-apiVersion: v1
-kind: ResourceQuota
-metadata: {name: default}
-spec:
-  hard: {requests.cpu: "2", requests.memory: 4Gi, limits.cpu: "4", limits.memory: 8Gi, persistentvolumeclaims: "3"}
-YAML
-kubectl -n "$NS" apply -f - <<YAML
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata: {name: default-deny}
-spec:
-  podSelector: {}
-  policyTypes: [Ingress, Egress]
-YAML
-# (Tillad kun ingress-controller + DNS + egress til DB/mail efter behov — del af chartet)
+# ResourceQuota + NetworkPolicy ejes af chartet (default-deny + allow-regler) — ikke her
+ensure_secrets "$NS"
 
 helm upgrade --install "tenant" "$CHART" -n "$NS" \
   --set domain="${SELLYOURSAAS_DOLIBARRINSTANCE_URL##*://}" \
   --set image.tag="$VERSION" \
-  --set instance="$INSTANCE" \
+  --set instance="$NS" \
   --wait --timeout 10m
 
+dns_create "$NS"   # opret DNS før health-check
+
 # Health: chartet eksponerer /healthz; agenten overvåger URL'en via cron.
-echo "deployed $INSTANCE ($VERSION) -> https://${SELLYOURSAAS_DOLIBARRINSTANCE_URL##*://}"
+log "deployed $NS ($VERSION) -> ${SELLYOURSAAS_DOLIBARRINSTANCE_URL}"
