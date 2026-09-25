@@ -1,0 +1,38 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup
+  labels: {app: dolibarr, tenant: {{ .Values.instance | quote }}}
+spec:
+  schedule: "{{ .Values.backup.schedule }}"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: backup
+              image: appropriate/curl
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  mysqldump -h {{ .Release.Name }}-mariadb -u $(DB_USER) -p$(DB_PASSWORD) dolibarr --single-transaction | gzip > /backup/backup-$(date +%Y%m%d%H%M%S).sql.gz
+                  {{- if .Values.backup.s3Enabled }}
+                  curl -X PUT -T /backup/backup-$(date +%Y%m%d%H%M%S).sql.gz "http://minio.minio.svc.cluster.local:9000/{{ .Values.backup.bucket }}/{{ .Values.instance }}/backup-$(date +%Y%m%d%H%M%S).sql.gz" 
+                  {{- end }}
+              env:
+                - name: DB_USER
+                  valueFrom: {secretKeyRef: {name: tenant-db, key: username}}
+                - name: DB_PASSWORD
+                  valueFrom: {secretKeyRef: {name: tenant-db, key: password}}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          restartPolicy: OnFailure
+          volumes:
+            - name: backup
+              emptyDir: {}
+{{- end }}

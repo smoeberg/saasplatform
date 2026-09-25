@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cron.sh — ekstern sundhedstjek af tenant-URL'en, kaldt periodisk af SellYourSaaS'
+# cron.sh — Ekstern sundhedstjek af tenant-URL'en, kaldt periodisk af SellYourSaaS'
 # supervision (§3.2, §3.6). Dette er IKKE runner-heartbeatet (det er en separat,
 # uafhængig cron på selve runneren beskrevet i §3.7) — dette er pr.-tenant helbred.
 

@@ -1,6 +1,7 @@
 # Default: standard-plan
 instance: ""
 domain: ""
+suspended: false
 image:
   repository: ghcr.io/smoeberg/dolibarr
   tag: "23.0.1"
@@ -20,9 +21,12 @@ ingress:
   className: traefik
   tls: true
 backup:
+  enabled: true
   # retentionDays: 7 (standard) / 30 (premium)
   retentionDays: 7
   schedule: "0 3 * * *"
+  s3Enabled: false
+  bucket: ""
 quota:
   requestsCpu: "1"
   requestsMemory: 2Gi

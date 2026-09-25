@@ -1,24 +1,36 @@
-#!/bin/bash
-# SellYourSaaS action: deploy (også deployall via loop i master)
+#!/usr/bin/env bash
+# deploy.sh — SellYourSaaS action: deploy
 # Arkitektur §3.3.1 (mapping+secrets), §5 fase 1b (DNS)
-set -euo pipefail
-source "$(dirname "$0")/lib.sh"
 
-NS="$(resolve_namespace)"
-CHART="${SAAS_CHART_DIR:?}/dolibarr"
-VERSION="${SELLYOURSAAS_VERSION:?}"   # image-tag = package-version (Arkitektur §3.5)
+source "$(dirname "$0")/lib.sh" "$@"
 
-kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
-# ResourceQuota + NetworkPolicy ejes af chartet (default-deny + allow-regler) — ikke her
-ensure_secrets "$NS"
+require_values_file
 
-helm upgrade --install "tenant" "$CHART" -n "$NS" \
+log "info" "Opretter namespace $NAMESPACE"
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+# Opret DB-secrets som SealedSecret
+log "info" "Opretter DB-secrets"
+create_sealed_secret "tenant-db" "$NAMESPACE" \
+  username=$(openssl rand -hex 16) \
+  password=$(openssl rand -hex 32) \
+  root_password=$(openssl rand -hex 32)
+
+log "info" "Kører helm upgrade --install for $RELEASE i $NAMESPACE"
+helm upgrade --install "$RELEASE" "$CHART_DIR" \
+  --namespace "$NAMESPACE" --create-namespace \
+  -f "$VALUES_FILE" \
   --set domain="${SELLYOURSAAS_DOLIBARRINSTANCE_URL##*://}" \
-  --set image.tag="$VERSION" \
-  --set instance="$NS" \
-  --wait --timeout 10m
+  --set image.tag="${SELLYOURSAAS_VERSION:-latest}" \
+  --set instance="$INSTANCE" \
+  --set suspended=false \
+  --wait --timeout 10m \
+  --atomic
 
-dns_create "$NS"   # opret DNS før health-check
+# Opret DNS-record
+dns_create "$NAMESPACE"
 
-# Health: chartet eksponerer /healthz; agenten overvåger URL'en via cron.
-log "deployed $NS ($VERSION) -> ${SELLYOURSAAS_DOLIBARRINSTANCE_URL}"
+wait_for_healthz "$(tenant_healthz_url)"
+
+write_status "deployed"
+log "info" "deploy fuldført for $RELEASE -> ${SELLYOURSAAS_DOLIBARRINSTANCE_URL}"

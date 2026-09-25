@@ -1,8 +1,13 @@
-#!/bin/bash
-# SellYourSaaS action: recreateauthorizedkeys — roter platformens adgang
-set -euo pipefail
-source "$(dirname "$0")/lib.sh"
-NS="tenant-${SELLYOURSAAS_INSTANCE_NAME:?}"
-NEW=$(openssl rand -hex 32)
-kubectl -n "$NS" create secret generic platform-access --from-literal=token="$NEW" --dry-run=client -o yaml | kubectl apply -f -
-echo "rotated platform-access for ${SELLYOURSAAS_INSTANCE_NAME:?}"
+#!/usr/bin/env bash
+# recreateauthorizedkeys.sh — SellYourSaaS action: roter platformens adgang
+
+source "$(dirname "$0")/lib.sh" "$@"
+
+# Generer ny adgangstoken
+NEW_TOKEN=$(openssl rand -hex 32)
+
+# Opret som SealedSecret
+create_sealed_secret "platform-access" "$NAMESPACE" \
+  token="$NEW_TOKEN"
+
+log "info" "Roteret platform-access secret for $INSTANCE"

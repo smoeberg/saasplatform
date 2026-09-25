@@ -4,7 +4,7 @@ metadata:
   name: dolibarr
   labels: {app: dolibarr, tenant: {{ .Values.instance | quote }}}
 spec:
-  replicas: 1
+  replicas: {{ if .Values.suspended }}0{{ else }}1{{ end }}
   selector: {matchLabels: {app: dolibarr}}
   template:
     metadata:

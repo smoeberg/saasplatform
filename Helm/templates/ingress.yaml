@@ -4,6 +4,9 @@ metadata:
   name: app
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    {{- if .Values.suspended }}
+    saasplatform.io/suspended: "true"
+    {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
@@ -15,4 +18,56 @@ spec:
         paths:
           - path: /
             pathType: Prefix
-            backend: {service: {name: dolibarr, port: {number: 80}}}
+            backend: 
+              {{- if .Values.suspended }}
+              {service: {name: suspended-service, port: {number: 80}}}
+              {{- else }}
+              {service: {name: dolibarr, port: {number: 80}}}
+              {{- end }}
+---
+{{- if .Values.suspended }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: suspended-service
+spec:
+  selector: {app: suspended-page}
+  ports: [{port: 80, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: suspended-page
+  labels: {app: suspended-page}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: suspended-page}}
+  template:
+    metadata:
+      labels: {app: suspended-page}
+    spec:
+      containers:
+        - name: suspended-page
+          image: nginx:alpine
+          ports: [{containerPort: 8080}]
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+      volumes:
+        - name: html
+          configMap:
+            name: suspended-html
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: suspended-html
+  labels: {app: suspended-page}
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head><title>Suspended</title></head>
+    <body><h1>Tenant Suspended</h1><p>This tenant has been suspended. Please contact support.</p></body>
+    </html>
+{{- end }}

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# refresh.sh — re-konvergerer tenanten til den tilstand values-filen beskriver.
-# Bruges også ved version-opdatering og rollback (§3.5): SellYourSaaS opdaterer
-# values-filen (ny eller tidligere version) og kalder blot refresh igen — idempotent.
+# refresh.sh — Re-konvergerer tenanten til den tilstand values-filen beskriver.
+# Bruges også ved version-opdatering og rollback (§3.5).
 
 source "$(dirname "$0")/lib.sh" "$@"
 
