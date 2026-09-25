@@ -1,0 +1,150 @@
+# Loki Helm values for saasplatform
+
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: "local-path"
+
+# Loki configuration
+loki:
+  enabled: true
+  
+  # Deployment configuration
+  replicaCount: 1
+  
+  # Resource configuration
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  
+  # Node selector
+  nodeSelector: {}
+  
+  # Tolerations
+  tolerations: []
+  
+  # Affinity
+  affinity: {}
+  
+  # Pod configuration
+  pod:
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 2000
+    labels: {}
+    annotations: {}
+    
+    # Priority class
+    priorityClassName: ""
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 3100
+    targetPort: 3100
+    annotations: {}
+    labels: {}
+
+  # Ingress configuration
+  ingress:
+    enabled: false
+    hosts: []
+    annotations: {}
+    tls: []
+
+  # Service account
+  serviceAccount:
+    create: true
+    name: ""
+    automountServiceAccountToken: true
+
+  # Persistence
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClassName: "local-path"
+    accessModes:
+      - ReadWriteOnce
+    finalizers:
+      - kubernetes.io/pvc-protection
+
+  # Configuration
+  config:
+    auth_enabled: false
+    
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9095
+      
+      # Log level
+      log_level: info
+      
+      # HTTP server configuration
+      http_server:
+        enabled: true
+
+    # Storage configuration
+    storage:
+      type: filesystem
+      filesystem:
+        chunks_directory: /data/loki/chunks
+        rules_directory: /data/loki/rules
+    
+    # Chunk storage
+    chunk_store:
+      max_look_back_period: 0s
+      
+    # Table manager
+    table_manager:
+      retention_deletes_enabled: true
+      retention_period: 30d
+      retention_stream:
+        - selector: '{namespace=~"tenant-.*"}'
+          priority: 1
+          period: 90d
+        - selector: '{namespace=~"(monitoring|kube-.*|cert-manager|velero)"}'
+          priority: 1
+          period: 7d
+
+    # Limits
+    limits:
+      enforce_metric_name: false
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h
+      
+    # Querier
+    querier:
+      max_concurrent: 20
+      
+    # Frontend
+    frontend:
+      max_outstanding_per_tenant: 1000
+
+  # Service monitor
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+
+  # Network policies
+  networkPolicy:
+    enabled: false
+    allowExternal: true
+
+# Image configuration
+image:
+  registry: docker.io
+  repository: grafana/loki
+  tag: 2.9.4
+  pullPolicy: IfNotPresent
+
+# Test framework
+testFramework:
+  enabled: false

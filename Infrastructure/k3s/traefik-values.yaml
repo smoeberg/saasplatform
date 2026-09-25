@@ -1,0 +1,125 @@
+# Traefik Ingress Controller configuration for saasplatform
+# 
+# Features:
+# - HTTP/HTTPS ingress
+# - Automatic TLS via cert-manager
+# - Dashboard (disabled in production)
+# - Custom entrypoints
+
+# Global configuration
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+# EntryPoints configuration
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+    http:
+      tls: {}
+
+# API and dashboard (disabled in production)
+api:
+  dashboard: false
+  insecure: false
+
+# Log configuration
+logs:
+  access:
+    enabled: true
+    format: json
+  general:
+    level: INFO
+
+# Metrics configuration
+metrics:
+  prometheus:
+    enabled: true
+    entryPoint: websecure
+
+# Kubernetes Ingress configuration
+providers:
+  kubernetesIngress:
+    enabled: true
+    publishedService:
+      enabled: true
+      pathOverride: ""
+    allowExternalNameServices: true
+  kubernetesCRD:
+    enabled: true
+
+# TLS configuration
+additionalArguments:
+  - "--providers.kubernetescrd.allowCrossNamespace=true"
+  - "--providers.kubernetescrd.allowExternalNameServices=true"
+
+# Service configuration
+service:
+  enabled: true
+  type: LoadBalancer
+  annotations: {}
+  labels: {}
+  spec:
+    loadBalancerIP: ""
+  ports:
+    web:
+      port: 80
+      targetPort: web
+      protocol: TCP
+    websecure:
+      port: 443
+      targetPort: websecure
+      protocol: TCP
+
+# Pod configuration
+pod:
+  annotations: {}
+  labels: {}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 2000
+
+# Resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Node selector (run on all nodes)
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Priority class
+priorityClassName: ""
+
+# RBAC configuration
+rbac:
+  enabled: true
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: true
+
+# Network policies
+networkPolicy:
+  enabled: false

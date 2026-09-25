@@ -1,0 +1,208 @@
+{
+  "title": "Resource Usage",
+  "uid": "resource-usage",
+  "tags": ["saasplatform", "resources", "monitoring"],
+  "timezone": "browser",
+  "schemaVersion": 37,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "title": "Cluster CPU Usage",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 70}, {"color": "red", "value": 90}]},
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Cluster Memory Usage",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 70}, {"color": "red", "value": 90}]},
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Cluster Disk Usage",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "100 - (node_filesystem_free_bytes{mountpoint='/'} / node_filesystem_size_bytes{mountpoint='/'} * 100)",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 70}, {"color": "red", "value": 90}]},
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Cluster Network I/O",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(container_network_receive_bytes_total[5m])",
+          "legendFormat": "{{pod}} - Receive"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(container_network_transmit_bytes_total[5m])",
+          "legendFormat": "{{pod}} - Transmit"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "Bps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Tenant CPU Usage",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "sum by(namespace) (rate(container_cpu_usage_seconds_total{namespace=~'tenant-.*'}[5m])) * 100",
+          "legendFormat": "{{namespace}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 50}, {"color": "red", "value": 80}]},
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Tenant Memory Usage",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "sum by(namespace) (container_memory_working_set_bytes{namespace=~'tenant-.*'}) / sum by(namespace) (container_spec_memory_limit_bytes{namespace=~'tenant-.*'}) * 100",
+          "legendFormat": "{{namespace}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 50}, {"color": "red", "value": 80}]},
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Tenant Storage Usage",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "kubelet_volume_stats_used_bytes{namespace=~'tenant-.*'} / kubelet_volume_stats_capacity_bytes{namespace=~'tenant-.*'} * 100",
+          "legendFormat": "{{namespace}} - {{persistentvolumeclaim}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 70}, {"color": "red", "value": 90}]},
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Pod Count",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 24},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(kube_pod_info{namespace=~'tenant-.*'})",
+          "legendFormat": "Total Pods"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Node Count",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 24},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(kube_node_info)",
+          "legendFormat": "Total Nodes"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "refresh": "30s",
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": ["saasplatform", "resources"],
+  "title": "Resource Usage",
+  "uid": "resource-usage"
+}

@@ -1,0 +1,136 @@
+# cert-manager Helm values for saasplatform
+# 
+# Configuration:
+# - Cloudflare DNS-01 challenge solver
+# - Automatic certificate issuance and renewal
+# - Prometheus metrics
+
+# Global configuration
+global:
+  leaderElection:
+    namespace: cert-manager
+
+# cert-manager configuration
+installCRDs: false  # Already installed via kubectl
+
+# Controller configuration
+controller:
+  enabled: true
+  replicaCount: 1
+  
+  # Resource configuration
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Node selector
+  nodeSelector: {}
+  
+  # Tolerations
+  tolerations: []
+  
+  # Affinity
+  affinity: {}
+  
+  # Pod configuration
+  pod:
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 2000
+    labels: {}
+    annotations: {}
+  
+  # Service account
+  serviceAccount:
+    create: true
+    name: ""
+    automountServiceAccountToken: true
+  
+  # Log level
+  logLevel: 2  # 0 = Debug, 1 = Info, 2 = Warn, 3 = Error
+
+# Webhook configuration
+webhook:
+  enabled: true
+  replicaCount: 1
+  
+  # Resource configuration
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Node selector
+  nodeSelector: {}
+  
+  # Tolerations
+  tolerations: []
+  
+  # Affinity
+  affinity: {}
+  
+  # Pod configuration
+  pod:
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 2000
+  
+  # Service account
+  serviceAccount:
+    create: true
+    name: ""
+    automountServiceAccountToken: true
+  
+  # Log level
+  logLevel: 2
+  
+  # Timeout
+  timeoutSeconds: 10
+
+# CA Injector configuration
+cainjector:
+  enabled: true
+  replicaCount: 1
+  
+  # Resource configuration
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Node selector
+  nodeSelector: {}
+  
+  # Tolerations
+  tolerations: []
+  
+  # Affinity
+  affinity: {}
+  
+  # Pod configuration
+  pod:
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 2000
+
+# Prometheus metrics
+prometheus:
+  enabled: true
+  servicemonitor:
+    enabled: true
+    interval: 60s
+    scrapeTimeout: 30s
+    labels: {}

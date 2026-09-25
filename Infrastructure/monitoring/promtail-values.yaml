@@ -1,0 +1,149 @@
+# Promtail Helm values for saasplatform
+
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# Promtail configuration
+promtail:
+  enabled: true
+  
+  # DaemonSet configuration
+  daemonSet:
+    enabled: true
+    replicaCount: 1
+    
+    # Resource configuration
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    
+    # Node selector (run on all nodes)
+    nodeSelector: {}
+    
+    # Tolerations
+    tolerations:
+      - operator: Exists
+    
+    # Affinity
+    affinity: {}
+    
+    # Pod configuration
+    pod:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+      labels: {}
+      annotations: {}
+      
+      # Priority class
+      priorityClassName: ""
+      
+      # Additional volumes
+      additionalVolumes: []
+      
+      # Additional volume mounts
+      additionalVolumeMounts: []
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+    annotations: {}
+    labels: {}
+
+  # Service account
+  serviceAccount:
+    create: true
+    name: ""
+    automountServiceAccountToken: true
+
+  # Configuration
+  config:
+    # Loki server URL
+    server:
+      http_listen_port: 80
+      grpc_listen_port: 0
+      
+    # Loki client configuration
+    clients:
+      - url: http://loki.monitoring.svc:3100/loki/api/v1/push
+        
+    # Positions configuration
+    positions:
+      filename: /data/positions.yaml
+    
+    # Scrape configuration
+    scrape:
+      # Scrape all pods by default
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        pipeline_stages:
+          - docker: {}
+        relabel:
+          action: keep
+          regex: true
+          source_labels:
+            - __meta_kubernetes_pod_annotationpresent_prometheus_io_scrape
+      
+      # Scrape tenant namespaces
+      - job_name: tenant-logs
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: ["tenant-*"]
+        pipeline_stages:
+          - docker: {}
+          - labels:
+              namespace:
+          - match:
+              selector: '{namespace=~"tenant-.*"}'
+              stages:
+                - regex:
+                    expression: 'namespace=([^,]+)'
+                    source: namespace
+                - labels:
+                    tenant:
+        relabel:
+          action: keep
+          regex: true
+          source_labels:
+            - __meta_kubernetes_pod_annotationpresent_saasplatform_io_logs
+      
+      # Scrape system namespaces
+      - job_name: system-logs
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: ["kube-system", "monitoring", "cert-manager", "velero"]
+        pipeline_stages:
+          - docker: {}
+        relabel:
+          action: keep
+
+  # Service monitor
+  serviceMonitor:
+    enabled: false
+
+  # Network policies
+  networkPolicy:
+    enabled: false
+
+# Image configuration
+image:
+  registry: docker.io
+  repository: grafana/promtail
+  tag: 2.9.4
+  pullPolicy: IfNotPresent
+
+# Test framework
+testFramework:
+  enabled: false

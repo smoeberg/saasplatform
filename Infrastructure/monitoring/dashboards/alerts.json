@@ -1,0 +1,184 @@
+{
+  "title": "Alerts",
+  "uid": "alerts",
+  "tags": ["saasplatform", "alerts", "monitoring"],
+  "timezone": "browser",
+  "schemaVersion": 37,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "title": "Active Alerts",
+      "type": "table",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 0},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "ALERTS{alertstate='firing'}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Value"},
+            "properties": [
+              {"id": "custom.width", "value": 300},
+              {"id": "custom.height", "value": 20}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "severity"},
+            "properties": [
+              {"id": "mappings", "value": [{"options": {"critical": {"text": "🔴 CRITICAL"}, "warning": {"text": "🟡 WARNING"}, "info": {"text": "🔵 INFO"}}, "type": "value"}]},
+              {"id": "custom.width", "value": 120}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "alertname"},
+            "properties": [
+              {"id": "custom.width", "value": 250}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Alerts by Severity",
+      "type": "piechart",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(ALERTS{alertstate='firing'}) by (severity)",
+          "legendFormat": "{{severity}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Alerts by Namespace",
+      "type": "piechart",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(ALERTS{alertstate='firing'}) by (namespace)",
+          "legendFormat": "{{namespace}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Critical Alerts",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 20},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(ALERTS{alertstate='firing', severity='critical'})",
+          "legendFormat": "Critical"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}]},
+          "color": {"mode": "thresholds"}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Warning Alerts",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 20},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(ALERTS{alertstate='firing', severity='warning'})",
+          "legendFormat": "Warning"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "orange", "value": null}]},
+          "color": {"mode": "thresholds"}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Info Alerts",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 20},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(ALERTS{alertstate='firing', severity='info'})",
+          "legendFormat": "Info"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "color": {"mode": "thresholds"}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Resolved Alerts (Last 24h)",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "ALERTS{alertstate='resolved'}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "refresh": "30s",
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": ["saasplatform", "alerts"],
+  "title": "Alerts",
+  "uid": "alerts"
+}

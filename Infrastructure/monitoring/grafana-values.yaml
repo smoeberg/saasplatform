@@ -1,0 +1,176 @@
+# Grafana Helm values for saasplatform
+
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: "local-path"
+
+# Grafana configuration
+grafana:
+  enabled: true
+  
+  # Deployment configuration
+  replicaCount: 1
+  
+  # Resource configuration
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  
+  # Node selector
+  nodeSelector: {}
+  
+  # Tolerations
+  tolerations: []
+  
+  # Affinity
+  affinity: {}
+  
+  # Pod configuration
+  pod:
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 2000
+    labels: {}
+    annotations: {}
+    
+    # Priority class
+    priorityClassName: ""
+    
+    # Additional containers
+    additionalContainers: []
+    
+    # Additional volumes
+    additionalVolumes: []
+    
+    # Additional volume mounts
+    additionalVolumeMounts: []
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+    annotations: {}
+    labels: {}
+
+  # Ingress configuration
+  ingress:
+    enabled: false
+    hosts: []
+    annotations: {}
+    tls: []
+
+  # Service account
+  serviceAccount:
+    create: true
+    name: ""
+    automountServiceAccountToken: true
+
+  # Admin credentials
+  admin:
+    existingSecret: ""
+    existingSecretKey: ""
+    userKey: admin-user
+    passwordKey: admin-password
+
+  # Grafana configuration
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/grafana/"
+      serve_from_sub_path: true
+    
+    auth:
+      disable_login_form: false
+      disable_signout_menu: false
+      
+    auth.anonymous:
+      enabled: false
+    
+    auth.basic:
+      enabled: true
+    
+    users:
+      allow_sign_up: false
+      auto_assign_org: true
+      auto_assign_org_role: Admin
+
+  # Persistence
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClassName: "local-path"
+    accessModes:
+      - ReadWriteOnce
+    finalizers:
+      - kubernetes.io/pvc-protection
+
+  # Plugins
+  plugins: []
+
+  # Dashboards
+  dashboards:
+    default: {}
+
+  # Datasources
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
+        isDefault: true
+        editable: false
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.monitoring.svc:3100
+        editable: false
+
+  # Sidecars
+  sidecars:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      folder: /tmp/dashboards
+      defaultFolderName: ""
+    
+    datasources:
+      enabled: true
+      label: grafana_datasource
+      labelValue: "1"
+      folder: /etc/grafana/provisioning/datasources
+
+  # Network policies
+  networkPolicy:
+    enabled: false
+    allowExternal: true
+
+  # RBAC
+  rbac:
+    create: false
+    rules: []
+
+# Image configuration
+image:
+  registry: docker.io
+  repository: grafana/grafana
+  tag: 10.3.3
+  pullPolicy: IfNotPresent
+
+# Test framework
+testFramework:
+  enabled: false
+
+# Cleanup
+cleanup:
+  enabled: false

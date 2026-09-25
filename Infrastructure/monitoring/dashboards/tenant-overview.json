@@ -1,0 +1,223 @@
+{
+  "title": "Tenant Overview",
+  "uid": "tenant-overview",
+  "tags": ["saasplatform", "tenant", "overview"],
+  "timezone": "browser",
+  "schemaVersion": 37,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "title": "Tenants Status",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(up{namespace=~'tenant-.*'})",
+          "legendFormat": "Total Tenants"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"options": {"0": {"text": "0"}, "1": {"text": "1"}}, "type": "value"}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Healthy Tenants",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(up{namespace=~'tenant-.*'} == 1)",
+          "legendFormat": "Healthy"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Unhealthy Tenants",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(up{namespace=~'tenant-.*'} == 0)",
+          "legendFormat": "Unhealthy"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Suspended Tenants",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "count(kube_deployment_spec_replicas{namespace=~'tenant-.*',replicas='0'})",
+          "legendFormat": "Suspended"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "orange", "value": null}]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "CPU Usage per Tenant",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "sum by(namespace) (rate(container_cpu_usage_seconds_total{namespace=~'tenant-.*'}[5m])) * 100",
+          "legendFormat": "{{namespace}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 50}, {"color": "red", "value": 80}]},
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Memory Usage per Tenant",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "sum by(namespace) (container_memory_working_set_bytes{namespace=~'tenant-.*'}) / sum by(namespace) (container_spec_memory_limit_bytes{namespace=~'tenant-.*'}) * 100",
+          "legendFormat": "{{namespace}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 50}, {"color": "red", "value": 80}]},
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Pod Status",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "kube_pod_status_phase{namespace=~'tenant-.*'}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {"excludeByName": {}, "indexByName": {}, "renameByName": {}}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Value"},
+            "properties": [
+              {"id": "mappings", "value": [{"options": {"Running": {"text": "✓"}, "Pending": {"text": "⏳"}, "Failed": {"text": "✗"}}, "type": "value"}]}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Healthz Status",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "probe_success{job=~'tenant-healthz.*'}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Value"},
+            "properties": [
+              {"id": "mappings", "value": [{"options": {"1": {"text": "✓ OK"}, "0": {"text": "✗ Failed"}}, "type": "value"}]}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Backup Status",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 28},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "velero_backup_success_total{namespace=~'tenant-.*'}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "refresh": "30s",
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": ["saasplatform"],
+  "title": "Tenant Overview",
+  "uid": "tenant-overview"
+}
