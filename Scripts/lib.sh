@@ -1,89 +1,90 @@
-#!/bin/bash
-# Fælles lib for alle remote-action-scripts. Kildes: source "$(dirname "$0")/lib.sh"
+#!/usr/bin/env bash
+# lib.sh — fælles funktioner for alle SellYourSaaS "kubernetes"-package remote-action scripts.
+# Alle 8 scripts starter med: source "$(dirname "$0")/lib.sh" "$@"
+#
+# ANTAGELSE DER SKAL VERIFICERES mod jeres faktiske SellYourSaaS-installation:
+# Dette lib antager at agenten kalder scriptet med contract-id som positionsparameter $1.
+# Hvis jeres SellYourSaaS-version i stedet eksporterer det som miljøvariabel (fx
+# $DOL_INSTANCE eller lignende — tjek DoliCloud's remote-action-dokumentation), så ret
+# linjen "INSTANCE=..." nedenfor til at læse derfra i stedet. Se også README.md i denne
+# mappe for den fulde liste af antagelser.
+
 set -euo pipefail
 
-# --- Logging ---
-log()  { echo "[$(date -u +%FT%TZ)] [${SELLYOURSAAS_INSTANCE_NAME:-?}] $*" >&2; }
-fail() { log "FEJL: $*"; exit 1; }
+# ---- Konfiguration (overstyres via miljøvariabler på K8s-runneren, §3.7) ----
+KUBECONFIG="${KUBECONFIG:-/etc/saasplatform/kubeconfig}"
+CHART_DIR="${CHART_DIR:-/opt/saasplatform/Helm/erp-tenant}"
+VALUES_DIR="${VALUES_DIR:-/etc/saasplatform/values}"
+STATUS_DIR="${STATUS_DIR:-/var/lib/saasplatform/status}"
+TENANT_DOMAIN="${TENANT_DOMAIN:-tenants.example.com}"   # ANTAGELSE: ret til jeres faktiske DNS-skema
+HEALTHZ_TIMEOUT="${HEALTHZ_TIMEOUT:-180}"                # sekunder at vente på grønt healthz
+HEALTHZ_INTERVAL=5
 
-# --- Namespace-mapping (Arkitektur §3.3.1) ---
-# Læs k8s_namespace extrafield fra SellYourSaaS (via agent-env/dolibarr REST),
-# fallback: generér tenant-{contract-id} og skriv tilbage til extrafield.
-# SELLYOURSAAS_CONTRACT_ID og SELLYOURSAAS_EXTRAFIELD_API sættes af wrapperen.
-resolve_namespace() {
-  local contract="${SELLYOURSAAS_CONTRACT_ID:?}"
-  local ns
-  ns="${SELLYOURSAAS_K8S_NAMESPACE:-}"
-  if [ -z "$ns" ]; then
-    ns="tenant-${contract}"
-    log "extrafield tomt → genererer namespace: $ns"
-    set_extrafield k8s_namespace "$ns"
-  fi
-  if [ "$ns" != "tenant-${contract}" ]; then
-    log "ADVARSEL: k8s_namespace ('$ns') matcher ikke tenant-${contract} — respekterer manuel override"
-  fi
-  echo "$ns"
+export KUBECONFIG
+
+# ---- Instans-id ----
+INSTANCE="${1:?Mangler contract-id som argument 1 (se ANTAGELSE øverst i lib.sh)}"
+
+# Sanitize: kun a-z, 0-9, bindestreg — undgår ugyldige K8s-navne / injection via navnet
+if [[ ! "$INSTANCE" =~ ^[a-z0-9-]+$ ]]; then
+  echo "FATAL: INSTANCE '$INSTANCE' indeholder ugyldige tegn (kun a-z, 0-9, -)" >&2
+  exit 2
+fi
+
+NAMESPACE="tenant-${INSTANCE}"
+RELEASE="tenant-${INSTANCE}"
+VALUES_FILE="${VALUES_DIR}/${NAMESPACE}.yaml"
+STATUS_FILE="${STATUS_DIR}/${NAMESPACE}.status"
+
+mkdir -p "$STATUS_DIR"
+
+# ---- Logging: journald (+ evt. fjernt syslog via logger-relæ, §3.7) ----
+log() {
+  local level="$1"; shift
+  local msg="[$NAMESPACE] $*"
+  logger -t saasplatform-k8s -p "user.${level}" "$msg" 2>/dev/null || true
+  echo "$(date -Is) [$level] $msg"
 }
 
-set_extrafield() {
-  local field="$1" value="$2"
-  if [ -n "${SELLYOURSAAS_EXTRAFIELD_API:-}" ]; then
-    curl -sf -X POST "$SELLYOURSAAS_EXTRAFIELD_API" \
-      -H "Authorization: Bearer $SELLYOURSAAS_API_TOKEN" \
-      -d "{\"contract\": \"${SELLYOURSAAS_CONTRACT_ID}\", \"field\": \"$field\", \"value\": \"$value\"}" \
-      >/dev/null || fail "kunne ikke gemme extrafield $field"
-  else
-    log "ADVARSEL: ingen EXTRAFIELD_API — extrafield $field gemmes ikke (dev)"
-  fi
+fail() {
+  log "err" "$*"
+  exit 1
 }
 
-# --- Secrets (Arkitektur §3.3.1: generér lokalt → SealedSecret → slet klartekst) ---
-ensure_secrets() {
-  local ns="$1"
-  if kubectl -n "$ns" get secret tenant-db >/dev/null 2>&1; then
-    log "secret tenant-db findes allerede"
-    return
-  fi
-  command -v kubeseal >/dev/null || fail "kubeseal mangler på runneren"
-  local pw rp
-  pw="$(openssl rand -base64 32)"
-  rp="$(openssl rand -base64 32)"
-  local tmp; tmp="$(mktemp)"
-  trap 'rm -f "$tmp"' RETURN
-  kubectl -n "$ns" create secret generic tenant-db \
-    --from-literal=username=dolibarr \
-    --from-literal=password="$pw" \
-    --from-literal=root_password="$rp" \
-    --dry-run=client -o yaml > "$tmp"
-  kubeseal -f "$tmp" -o yaml | kubectl apply -f -
-  rm -f "$tmp"   # klartekst slettes straks
-  unset pw rp    # fjern variabler
-  log "SealedSecret tenant-db oprettet i $ns"
+trap 'log "err" "Script fejlede ved linje $LINENO (exit-kode $?)"' ERR
+
+# ---- Helpers ----
+require_values_file() {
+  [[ -f "$VALUES_FILE" ]] || fail "Values-fil mangler: $VALUES_FILE (skal være renderet af SellYourSaaS' config-template før scriptet kaldes)"
 }
 
-# --- DNS (Cloudflare, Arkitektur §5 fase 1b) ---
-dns_create() {
-  local ns="$1" domain="${SELLYOURSAAS_DOLIBARRINSTANCE_URL:?}"
-  [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || { log "ADVARSEL: ingen CLOUDFLARE_API_TOKEN — DNS ikke automatiseret (dev)"; return; }
-  local zone="kunder.saasplatform.dk"   # TODO: pr. setup
-  local rec="${domain%%.$zone}"
-  curl -sf -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \
-    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{\"type\":\"A\",\"name\":\"${rec}\",\"content\":\"${CLOUDFLARE_INGRESS_IP:?}\",\"ttl\":300}" \
-    >/dev/null || fail "kunne ikke oprette DNS-record"
-  log "DNS-record oprettet: $domain → $CLOUDFLARE_INGRESS_IP"
+namespace_exists() {
+  kubectl get namespace "$NAMESPACE" >/dev/null 2>&1
 }
 
-dns_delete() {
-  local domain="${SELLYOURSAAS_DOLIBARRINSTANCE_URL:?}"
-  [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || return 0
-  local zone="kunder.saasplatform.dk"
-  local rec="${domain%%.$zone}"
-  local id
-  id=$(curl -sf "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${domain}" \
-    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq -r '.result[0].id // empty')
-  [ -n "$id" ] && curl -sf -X DELETE "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records/$id" \
-    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" >/dev/null
-  log "DNS-record slettet: $domain"
+release_exists() {
+  helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1
+}
+
+tenant_healthz_url() {
+  echo "https://${INSTANCE}.${TENANT_DOMAIN}/healthz"
+}
+
+wait_for_healthz() {
+  local url="$1"
+  local waited=0
+  log "info" "Venter på 200 fra $url (timeout ${HEALTHZ_TIMEOUT}s)"
+  until curl -fsS -o /dev/null -m 5 "$url"; do
+    sleep "$HEALTHZ_INTERVAL"
+    waited=$((waited + HEALTHZ_INTERVAL))
+    if (( waited >= HEALTHZ_TIMEOUT )); then
+      fail "Healthz aldrig grøn efter ${HEALTHZ_TIMEOUT}s: $url"
+    fi
+  done
+  log "info" "Healthz OK efter ${waited}s"
+}
+
+write_status() {
+  echo "$1" > "$STATUS_FILE"
+  log "info" "Status skrevet: $1 -> $STATUS_FILE"
 }
