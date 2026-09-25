@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: documents}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 5Gi}}
+{{- if .Values.db.storageClass }}
+  storageClassName: {{ .Values.db.storageClass }}
+{{- end }}
