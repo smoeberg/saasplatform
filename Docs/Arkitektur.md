@@ -1,189 +1,138 @@
 # saasplatform — Arkitektur til SaaS-platform
 
-> Status: Besluttet. Hybrid-design vedtaget: SellYourSaas som management plane, Kubernetes som data plane. Dokumentet inkluderer beslutninger fra arkitekturgennemgangen (2026-09-25).
+> Status: rev. 3 (2026-09-25). Besluttet model: **SellYourSaaS forbliver uændret** (frit opdaterbart), to deployment-typer i produktion fra dag ét (native + Kubernetes via package-scripts). Kubernetes-operator/CRD udskudt, indtil antallet af container-tenants vokser.
 
 ## 1. Formål og grundidé
 
 saasplatform er en generel platform til drift af SaaS-forretninger:
 
-- **Software leveres i containere** og udrulles automatisk pr. kunde.
-- **Dolibarr er "source of truth"** for kunder, abonnementer, økonomi og support.
+- **Software leveres pr. kunde** — enten som en native SellYourSaaS-instans eller som containere i Kubernetes.
+- **Dolibarr + SellYourSaaS er "single source of truth"** for kunder, abonnementer, økonomi og support.
 - Platformen håndterer **onboarding, opdatering, suspension, backup og support** — 100 % automatiseret fra ordre til opsigelse.
 
-Fundamentet er et hybrid-design: Vi genbruger det gennemtestede forretningslag fra [SellYourSaas](https://github.com/DoliCloud/sellyoursaas) (DoliCloud, open source, i produktion hos dolicloud.com og glpi-network.cloud) og erstatter dets data plane (Apache/PHP/chroot pr. Unix-bruger) med et Kubernetes-baseret container-dataplane. SellYourSaaS deployer som udgangspunkt ikke containere — derfor er K8s-agenten et selvbygget tillæg og ikke blot en konfigurationsændring.
+### Overvejelser: hvorfor ikke den store API-arkitektur?
+
+En tidligere version (rev. 2) foreslog en egen REST-API (`saasplatformd`) + K8s-operator som platformskerne. Det er arkitektonisk elegant, men for omfattende som et første skridt. Rev. 3 vælger i stedet den letteste integration, der bevarer alle fordelene:
+
+- **Der røres ikke ved koden i SellYourSaaS.** Al tilpasning ligger i packages (data i Dolibarr) og i vores egne shell-scripts. DoliCloud kan udgive nye versioner frit — vi opdaterer modulet uden regressioner.
+- **Containere implementeres via en ny package-type**, hvis deploy-scripts kalder `helm`/`kubectl` mod K8s. SellYourSaaS-agenten ved ikke, at der er containere i baggrunden — den kører scripts, som den altid gør.
 
 ## 2. Arkitekturprincipper
 
-1. **Dolibarr er en adapter, ikke en afhængighed.** Alt Dolibarr-specifikt (REST API, webhooks, eventformater) er samlet i én adapter. Platformens kerne benytter et generisk sprog: *tenant → produkt, plan, version, ønsketilstand*. Platformen kan dermed sælges og kobles til ethvert ERP-system.
-2. **Én kilde til sandhed pr. datatype.** Dolibarr ejer kunder, kontrakter, fakturering og tickets. Platformens kerne gemmer kun tenant-lifecycle-tilstand (status, version, ønsketilstand). Kundedata må aldrig duplikeres.
-3. **Kun Kubernetes-provisionering.** Provisioneringslogik skrives én gang og målrettes K8s-API'et (k3s i dev og prod). Docker Compose/Swarm bruges kun til lokal udvikling af selve produkterne.
-4. **Idempotent provisionering via operator-mønsteret.** Ønsketilstanden deklareres som en Kubernetes-CR; operatoren sørger for kontinuerlig reconciliation. Kubernetes API er kilden til status.
-5. **Fail-closed.** Udrulninger og ændringer rammer kun produktion, når health-checks er grønne; fejl i provisioneringen stopper flowet frem for at efterlade halvfærdige instanser.
+1. **SellYourSaaS er ikke en kode-afhængighed.** Vi patcher aldrig modulet. Vores tilpasninger ligger i package-konfiguration og scripts. Opdateringer af SellYourSaaS skal altid være sikre.
+2. **Én kilde til sandhed pr. datatype.** Dolibarr ejer kunder, kontrakter, fakturering og tickets.
+3. **To deployment-typer, endelig tilstand (ikke overgang):**
+   - **Native** (Unix-bruger + chroot + FPM + Apache-vhost) til mindre risikable apps (PIM).
+   - **Kubernetes** (namespace + Ingress + tenant-DB pr. tenant) til høje sikkerhedskrav (hosted Dolibarr ERP).
+4. **Fail-closed.** Udrulninger og ændringer rammer kun produktion, når health-checks er grønne; provisioning-fejl stopper flowet fremfor at efterlade halvfærdige instanser.
 
 ## 3. Logisk arkitektur
 
 ```
-                    Dolibarr (ERP/CRM: kunder, kontrakter, fakturaer, tickets)
-                        │  SellYourSaas-modul: packages, services, myaccount,
-                        │  Stripe/SEPA-betaling, suspension, anti-abuse
-                        │  (webhooks + REST-polling som sikkerhedsnet)
-                        ▼
-              ┌───────────────────────────────────┐
-              │  Dolibarr-adapter /               │   ← det eneste Dolibarr-bevidste lag
-              │  deployment-agent ("kubernetes")  │     (SellYourSaaS' remote-action-protokol,
-              │                                   │      versioneret + kontrakt-testet i CI)
-              └─────────┬─────────────────────────┘
-                        ▼
-              ┌───────────────────────────────────┐
-              │  Tenant Controller                │   ← platformens egen, genbrugelige kerne
-              │  (ÉN Go-binar, to reconcilers):  │     (delt RBAC + audit-log-strøm)
-              │  1) lifecycle-reconciler (events) │     (canary-logikken læser/skriver
-              │  2) CR-reconciler (idempotent)    │      TenantInstance-spec direkte)
-              └─────────┬─────────────────────────┘
-                        ▼
-    ┌───────────────────────────────────────────────┐
-    │  Kubernetes (data plane) — 1 namespace/tenant │
-    │  Deployment/StatefulSet · Service · Ingress · │
-    │  PVC · tenant-eget DB-StatefulSet · Secrets · │
-    │  NetworkPolicy · ResourceQuota ·              │
-    │  produktets Helm-chart                        │
-    └───────────────────────────────────────────────┘
-    Support: dashboard (CRD-status) · Loki · Prometheus/Grafana
-    Event-bus (NATS): operator-hændelser → AutoHeal (fase 3)
+        ┌──────────────────────────────────────────────┐
+        │  Dolibarr + SellYourSaaS (master)            │
+        │  kunder · packages/services · myaccount      │
+        │  Stripe/SEPA · suspension · support · reseller│
+        └──────────────┬───────────────────────────────┘
+                       │ remote actions (SSH + agent, port 8080)
+        ┌──────────────┴────────────────┬──────────────┐
+        ▼                               ▼
+┌──────────────────┐          ┌─────────────────────────┐
+│ Native deployment│          │ K8s-runner              │
+│ server           │          │ (lille server/pod med   │
+│                  │          │ kubectl + helm +        │
+│ PIM m.fl.        │          │ kubeconfig)             │
+│ chroot + FPM     │          │                         │
+│ (standard SYSAAS)│          │ Dolibarr ERP-tenants:   │
+└──────────────────┘          │ namespace + Ingress +   │
+                              │ tenant-DB pr. kunde     │
+                              └─────────────────────────┘
 ```
 
-### 3.1 SellYourSaas' rolle (management plane)
+### 3.1 Hvad vi genbruger uændret fra SellYourSaaS
 
-Fra SellYourSaas genbruges uændret:
+- **Package-modellen**: En *Package* definerer produktet (sources, config-templates, SQL-after-deploy, cron-templates, shell-after-deploy).
+- **Service-modellen**: En service kobler pakken til abonnement, pris, options og metrics. Kvoter pr. kunde/IP/tidsvindue er en del af plandefinitionen.
+- **Kundecenter (myaccount)**, **Stripe/SEPA + suspension**, **support/tickets**, **reseller-netværk**, **manuel admin-override** (deploy/suspend/undeploy/password-reset).
 
-- **Packages-modellen**: et *Package* definerer produktet (sources, config-templates med variabler som `__APPDOMAIN__`/`__DBNAME__`, SQL-after-deploy, cron-templates, shell-after-deploy). Oversættes til: sources → container-image, config-template → ConfigMap/Secret, SQL-after-deploy → init-job, shell-after-deploy → postStart-hook/job.
-- **Services-modellen**: en *Service* (type Application) kobler pakken til abonnement, pris, tilvalg og metrics (antal beregnes via BASH/SQL/PHP-formler — fx "pris pr. bruger"). **Kvoter pr. kunde/IP/tidsinterval er en del af plan-definitionen**, ikke blot et plan-navn.
-- **Kundecenter (myaccount)**: register.php, login, instans-oversigt, fakturering, tickets.
-- **Betaling**: Stripe (SCA) og SEPA, automatisk fakturering, suspension ved manglende betaling, dunning.
-- **Support og anti-abuse**: helpdesk, blacklists, kvoter.
-- **Reseller-netværk**: kommission knyttet til betalte fakturaer — aktiveres, hvis platformen sælges via partnere.
-- **Manuel admin-override**: deploy/suspend/undeploy og password-reset er et separat sæt handlinger ved siden af det automatiske event-drevne flow — det er en nødvendighed i praksis og skal være tænkt ind fra start.
+### 3.2 Package-type "kubernetes" — integrationen
 
-### 3.2 Ny dataplane-type: "Kubernetes deployment server"
+En ny package, hvor alle shell-scripts kalder K8s. Eksempel på package-felter:
 
-I SellYourSaaS sender masteren 8 remote actions (deploy, deployall, undeploy, undeployall, suspend, unsuspend, refresh, recreateauthorizedkeys) til deployment-serverens agent på port 8080. Vi tilføjer en ny deployment-server-type, **"kubernetes"**, hvor agenten i stedet for at køre shell-scripts oversætter actions til K8s-API-kald:
+- `sources`: tomt (installeres ikke på runneren — imaget findes allerede i GHCR)
+- `afterdeploy`: script, der kører `helm upgrade --install tenant-$INSTANCE {chart}` med `-f` pr. instans
+- `afterundeploy`: `helm uninstall tenant-$INSTANCE; kubectl delete ns tenant-$INSTANCE`
+- `aftersuspend`: `kubectl scale --replicas=0 deploy/... -n tenant-$INSTANCE` + Ingress → "suspended"-vhost
+- `afterunsuspend`: skalering tilbage + genopretning af Ingress
+- `refresh`: re-apply af ønsket tilstand (re-converge)
+- `cron`: ekstern health-check af tenant-URL (f.eks. `/healthz`) fra runner
 
-| SellYourSaaS action | K8s-operation |
-|---|---|
-| deploy/deployall | opret namespace + ResourceQuota + NetworkPolicy; generér Secrets; Helm-install af produktchart (inkl. tenant-specifikt DB-StatefulSet); Ingress + cert-manager (TLS); DNS-record via API |
-| undeploy/undeployall | backup-dump → Helm-uninstall → sletning af namespace (finalizers); tilbagekald alle platformens legitimationsoplysninger til tenant |
-| suspend/unsuspend | **skalering til nul** af tenant-workloads + Ingress blokeret med "suspended"-vhost; **PVC'er bevares**; CronJobs suspenderes; retention: data bevares i 90 dage, hvorefter de slettes (GDPR) — konfigurerbart pr. plan |
-| refresh | genopret ønsket tilstand (reconcile) |
-| recreateauthorizedkeys | roter platformens adgangsoplysninger til tenant; ved opsigelse: eksplicit revoke-action |
+**Vigtigt:** Package-konfigurationen skal desuden sikre, at SellYourSaaS kan overvåge instansen. Agenten tjekker tenantens Ingress-URL som health-check (f.eks. `/healthz`-endepunktet i chartet).
 
-Protokol- og versionstyring: remote-action-kaldene bærer en **protokolversion**; agenter, der er bagud, afvises pænt (fail-closed); kontrakt-test adapter↔agent kører i CI mod en mock-server.
+### 3.3 Dataplane: Dolibarr ERP pr. tenant
 
-### 3.3 TenantInstance-CRD
+- 1 namespace/tenant: `tenant-{contract-id}`
+- Deployment + Service + Ingress (Traefik) + cert-manager-TLS
+- **Tenant-specifikt DB-StatefulSet** (MariaDB) i samme namespace
+- NetworkPolicy (default deny) + ResourceQuota
+- Secrets via sealed-secrets (fase 1)
+- PVC til Dolibarr-dokumenter
 
-```yaml
-apiVersion: saasplatform.io/v1
-kind: TenantInstance
-metadata:
-  name: tenant-usrA1B2C3
-  namespace: tenant-instances
-spec:
-  tenantId: usrA1B2C3          # = SellYourSaaS contract id
-  productRef: dolibarr         # package reference
-  plan: standard               # service/plan fra Dolibarr
-  version: "23.0.1"            # billedversion
-  domain: kunde.mysaasdomain.com
-  quota:                       # er en del af plan-definitionen
-    users: 5
-    storageGb: 10
-  resellerRef: ""              # fyldes, hvis tenant er skabt via reseller
-  suspended: false
-status:
-  phase: provisioning          # provisioning | ready | suspended | failed | deleted
-  observedGeneration: 3
-  health: green
-  lastMessage: "Helm release 23.0.1 deployed"
-  conditions: [...]
-```
+**Suspension:** Skala-til-nul + blokeret Ingress; PVC'er bevares; CronJobs suspenderes; retention: 90 dage, herefter slettes (GDPR) — konfigurerbart pr. plan.
 
-Operatoren (Go + Operator SDK/kubebuilder) reconciler kontinuerligt: CR er ønsketilstanden, og Kubernetes er tilstandsmotoren.
+**Backup:** Natlig Velero (namespace) + natlig DB-dump (mysqldump) til S3-kompatibel storage, udført samtidigt (ikke forskudt). 7 dages retention på standard, 30 dage + binlog-stream (point-in-time) på premium. Gendannelse af enkelt tenant: Velero-restore + indlæsning af matchende DB-dump.
 
-### 3.4 Database pr. tenant
+### 3.4 Dataplane: PIM og andre lavrisiko-apps
 
-Grundlæggende valg: **database pr. tenant** (StatefulSet i tenant-namespace, provisioneret via produktets Helm-chart). Dette sikrer hård isolation, uafhængig backup og forudsigelig ydelse; omkostningerne styres med ResourceQuota.
+Køres på **standard SellYourSaaS native deployment-servere** (Unix-bruger + chroot + FPM + separat DB). Meget lave omkostninger (<0,50 USD/instans ifølge DoliCloud). En moderat sikkerhedsrisiko accepteres — PIM har typisk en mindre angrebsflade end et ERP med regnskab og persondata.
 
-- Delt database med schema-isolation er eksplicit **ikke** tilgangen i fase 1 — det er kun relevant ved >1000 tenants eller meget små planer.
-- Backup af DB: applikationsbevidste dumps (mysqldump/pg_dump) pr. tenant, ikke kun Velero-PVC.
-
-### 3.5 Opdateringsflow
+### 3.5 Opdatering af tenant-software
 
 - Nyt image i GHCR via CI → ny package-version i SellYourSaaS.
-- Tenant Controller (samme binære fil som operatoren) styrer rollout i grupper: canary (5–10 % af tenants) → 30–60 min. overvågning (health via CRD-status + Prometheus) → udrulning til alle. Styringen sker i controlleren og ikke via Git-commits pr. tenant.
-- **Canary-udvælgelsen er stratificeret** (ikke tilfældig): mindst én tenant pr. plan og pr. deployment-server/region, roteret så canary-gruppen ikke altid består af de samme kunder. Rollback sker **pr. tenant** og ikke for hele gruppen.
-- Fail-closed: ny version promoveres kun, hvis canary-gruppen er grøn.
-- Rul tilbage = sæt tidligere version i CR; operatoren reconciler tilbage.
+- Udrulning i grupper: canary (5–10 %, stratificeret efter plan og deployment-server, roteret så det ikke altid er de samme kunder, der tester først) → 30–60 min. overvågning → udrulning til alle.
+- Fail-closed; rollback pr. tenant (sæt tidligere version i package/contract og re-apply).
+- Native apps opdateres via SellYourSaaS' indbyggede `master_redeploy_instances`-mønster (batch + canary).
 
-### 3.6 Support-lag
-
-- Dashboard pr. tenant: CRD-status, version, health, seneste hændelser — direkte fra K8s-API, uden egen status-DB.
-- Logs: Loki; metrics: Prometheus/Grafana, mærket pr. tenant-namespace.
-- Adgang til tenant-data sker kun via platformen med audit-log — aldrig direkte i tenant-containere.
-- Tickets forbliver i Dolibarr; platformen linker ticket → tenant og viser health.
-
-### 3.7 Sikkerhed og backup
-
-- Namespace + NetworkPolicy + ResourceQuota pr. tenant (stærk isolation).
-- Secrets: **sealed-secrets i fase 1** (færre afhængigheder, k3s-venligt); external-secrets (Vault/KMS) vurderes i fase 3, når flere produkter kræver rotation.
-- TLS overalt via cert-manager; audit-log af alle administrative handlinger.
-- **Backup-politik pr. plan** (med samtidige snapshots, ikke forskudt):
-  - Standard: daglig Velero (namespace) + natlig DB-dump, 7 dages retention.
-  - Premium: daglig Velero + DB-dump + binlog-stream (point-in-time recovery), 30 dages retention.
-  - Gendannelse af enkelt tenant: Velero-restore af namespace + indlæsning af tilhørende DB-dump via init-job.
-- Anti-abuse: genbrug af SellYourSaaS' blacklist- og quota-systemer på tilmeldingsniveau.
-
-### 3.8 Observability og skaleringsmål
+### 3.6 Observability og skaleringsmål
 
 - Mål: **10 tenants i fase 1, 100+ i fase 2, 1000+ i fase 3** — dimensioneringen følger heraf.
-- Loki/Prometheus bruger labels (`tenant_id`) fremfor separate instanser pr. tenant; hvis 1000+ tenants kræver det, vurderes Capsule/vCluster før endelig beslutning.
-- Namespaces forbliver isolationsgrænsen i K8s uanset tilgangen til observability.
+- Loki + Prometheus/Grafana; labels (`tenant_id`) — ikke separate instanser pr. tenant.
+- Dashboard pr. tenant: health via tenant-URL + SellYourSaaS' supervision.
+- K8s-operator/CRD udskudt: Helm + cron-controllere er tilstrækkeligt til 10–50 tenants. Beslutningen genbesøges, når antallet af Dolibarr-tenants overstiger ~50.
 
-## 4. Teknologisk stak
+## 4. Teknologistak
 
 | Lag | Valg | Begrundelse |
 |---|---|---|
-| Management plane | SellYourSaas (Dolibarr-modul) | gennemtestet forretningslag; daglig drift hos DoliCloud |
-| Adapter/agent (K8s-target) | SellYourSaaS-agent + Go-klient | understøtter eksisterende remote-action-protokol (versioneret) |
-| Tenant Controller | ÉN Go-binær (Operator SDK/kubebuilder), to reconcilers | Idempotent reconcile; færre bevægelige dele i fase 1 |
-| CRD | `TenantInstance` | K8s fungerer som tilstandsmotor |
-| Produkt-pakkering | Helm charts pr. produkt | Genbrugelig, versioneret |
-| Event-bus | NATS | Letvægt; mulighed for AutoHeal i fase 3 |
+| Management plane | SellYourSaaS (uændret Dolibarr-modul) | gennemtestet; gratis opdateringer |
+| K8s-runner | Lille server/pod med kubectl + helm + kubeconfig | SellYourSaaS-agenten kører scripts som normalt |
+| Dataplane (ERP) | k3s, Traefik, cert-manager, sealed-secrets, tenant-DB | Strikt isolation pr. tenant |
+| Dataplane (PIM) | SellYourSaaS native | Billigt, gennemprøvet, moderat risiko |
 | Observability | Prometheus + Grafana + Loki | Standard, open source |
 | Registry | GHCR | Allerede på GitHub |
-| Ingress/TLS | Traefik + cert-manager | Traefiks CRD-baserede routing passer til operator-mønsteret; Nginx droppet for at undgå dobbeltkonfiguration |
-| Klynge | k3s | Enkel, stabil, let at drifte on-prem |
 
 ## 5. Implementeringsfaser
 
-**Fase 1a — validering af forretningsflowet (uge 1–3)**
-1. Installér SellYourSaaS (master + 1 **native** deployment-server) i dev; gennemfør hele flowet: registrering → deploy (native) → betaling → suspension. Dette er et proof of concept for management-planen, ikke for containere.
+**Fase 1a — forretningsflowet (uge 1–3)**
+1. Installér Dolibarr + SellYourSaaS (master + 1 native deployment-server) i dev; gennemfør: registrering → deploy (native) → betaling → suspension.
+2. Deployér PIM som første native package; verificér hele flowet med PIM.
 
-**Fase 1b — validering af container-dataplanen (uge 3–6)**
-2. Definér `TenantInstance`-CRD (spec + status + phases) og Dolibarr-event-kontrakten (ny ordre, planændring, opsigelse, betaling/modbetaling) med webhook-signing og protokolversion i kaldene (gamle agenter afvises høfligt; kontrakt-test i CI mod mock-server).
-3. Byg operatoren (skeleton) + ét produkts Helm-chart (inkl. tenant-DB); k3s-dev-klynge med Traefik, cert-manager, sealed-secrets.
+**Fase 1b — K8s-integration (uge 3–6)**
+3. Sæt k3s-cluster op (Traefik, cert-manager, sealed-secrets) + K8s-runner med kubectl/helm/kubeconfig.
+4. Byg "kubernetes"-package til Dolibarr: Helm-chart (namespace, DB, Ingress, cert-manager) + 8 shell-scripts til de 8 remote actions.
+5. Verificér flowet end-to-end: ny testkunde → Helm-deploy → fakturering → suspension → undeploy.
 
-**Fase 2 — produktionsklar (uge 6–12)**
-4. Ny deployment-server-type "kubernetes" i SellYourSaaS; agent implementerer de 8 remote actions mod K8s. Første K8s-tenant i produktion.
-5. Canary-rollout-controller; dashboards, Loki/Prometheus, Velero-backup, DNS-automatik pr. tenant.
-6. NATS-event-bus + log over alle hændelser (AutoHeal-implementering udskydes).
+**Fase 2 — produktion (uge 6–12)**
+6. Produktionsmiljø for begge deployment-typer; Velero + natlig DB-dump; DNS-automatisering pr. tenant.
+7. Canary-rollout-rutine til opdateringer; dashboards og alerts.
 
 **Fase 3 — skalering**
-7. Support for flere produkter (flere packages/charts), reseller-netværk, AutoHeal, external-secrets.
-8. **Udfasning af native-mode**: deadline = 12 måneder efter første K8s-tenant i produktion. Migrering fra native → K8s: datadump + DNS-cutover med planlagt nedetid; tilbagemigrering fra K8s → native understøttes ikke.
+8. Revurdering af operator/CRD ved ~50 Dolibarr-tenants; reseller-netværk; external-secrets.
 
 ## 6. Risici og beslutninger
 
-- **SellYourSaaS deployer ikke containere som standard** — det er et bevidst kompromis af hensyn til omkostningerne (dokumentationen angiver ≥10x lavere omkostninger end container-løsninger). Vores K8s-agent er derfor et selvbygget tillæg: hold ændringer i en separat agent-type, og bidrag gerne tilbage upstream.
-- **GPL-bemærkning**: brug på serversiden udløser ikke udleveringspligt; men hvis modulet distribueres til kunder (f.eks. on-prem), udløser det GPL's distributionspligt. Bidrag gerne ændringer tilbage.
-- **Én hovedvedligeholder upstream** (DoliCloud) — planlæg versionsfrys af SellYourSaaS-modulet og egne patches i eget repo.
-- **Dolibarr-webhooks er ikke pålidelige** — periodisk polling er en fast del af designet, ikke en feature til senere.
-- **AutoHeal nu = overengineering** — byg event-krogen, men udskyd automatiseringen.
-- **Omkostninger**: K8s-dataplane er dyrere pr. instans end SellYourSaaS' native-mode; hvis de første produkter er PHP-apps, kan de i en overgangsperiode køre på SellYourSaaS' native deployment-servere, mens K8s-tilgangen modnes. Én platform, to deployment-typer — men med en fastsat deadline (se fase 3.8).
+- **SellYourSaaS-agenten forventer vhost/DNS/health-mønstre** — vores Helm-chart skal give agenten noget at overvåge (Ingress-URL med health-endepunkt). Defineres i package-konfigurationen.
+- **K8s er dyrere pr. instans end native** — accepteret for Dolibarr-ERP pga. sikkerhedskrav; PIM og lignende køres native for at holde omkostningerne nede.
+- **GPL-bemærkning**: server-side-brug udløser ikke udleveringspligt; hvis modulet distribueres til kunder (on-prem), udløses GPL's distributionspligt.
+- **Én primær vedligeholder upstream** (DoliCloud) — accepteret, netop fordi vi ikke patcher: versionsfrys er ikke nødvendig, men vi følger udgivelser og tester opdateringer i dev først.
+- **Dolibarr-webhooks er ikke pålidelige** — periodisk polling er en fast del af designet.
