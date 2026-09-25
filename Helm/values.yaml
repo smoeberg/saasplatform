@@ -1,0 +1,35 @@
+# Default: standard-plan
+instance: ""
+domain: ""
+image:
+  repository: ghcr.io/smoeberg/dolibarr
+  tag: "23.0.1"
+dolibarr:
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "2", memory: 1Gi}
+db:
+  enabled: true
+  storage: 5Gi
+  storageClass: ""
+  resources:
+    requests: {cpu: 100m, memory: 512Mi}
+    limits: {cpu: "1", memory: 1Gi}
+ingress:
+  enabled: true
+  className: traefik
+  tls: true
+backup:
+  # retentionDays: 7 (standard) / 30 (premium)
+  retentionDays: 7
+  schedule: "0 3 * * *"
+quota:
+  requestsCpu: "1"
+  requestsMemory: 2Gi
+  limitsCpu: "2"
+  limitsMemory: 4Gi
+  pvc: "3"
+networkPolicy:
+  defaultDeny: true
+  # egress tilladelser (mail, DNS, opdateringer)
+  egressMail: true
