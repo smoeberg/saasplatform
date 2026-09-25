@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dolibarr
+spec:
+  selector: {app: dolibarr}
+  ports: [{port: 80, targetPort: 80}]
