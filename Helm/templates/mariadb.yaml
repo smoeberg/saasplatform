@@ -1,0 +1,40 @@
+{{- if .Values.db.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: mariadb}
+spec:
+  serviceName: mariadb
+  replicas: 1
+  selector: {matchLabels: {app: mariadb}}
+  template:
+    metadata: {labels: {app: mariadb}}
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:11
+          env:
+            - name: MARIADB_DATABASE
+              value: dolibarr
+            - name: MARIADB_USER
+              valueFrom: {secretKeyRef: {name: tenant-db, key: username}}
+            - name: MARIADB_PASSWORD
+              valueFrom: {secretKeyRef: {name: tenant-db, key: password}}
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: tenant-db, key: root_password}}
+          ports: [{containerPort: 3306}]
+          volumeMounts: [{name: data, mountPath: /var/lib/mysql}]
+          resources:
+{{ toYaml .Values.db.resources | indent 12 }}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: {{ .Values.db.storage }}}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: mariadb}
+spec:
+  selector: {app: mariadb}
+  ports: [{port: 3306, targetPort: 3306}]
+{{- end }}
