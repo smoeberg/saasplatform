@@ -38,12 +38,9 @@ jobs:
         run: |
           # MinIO er ikke laengere offentligt tilgaengeligt (docker.io + quay.io kraever
           # login siden 2025) -- CI bruger adobe/s3mock som S3-API-mock i stedet.
-          docker run -d -p 9000:9090 --name s3mock adobe/s3mock
+          docker run -d -p 9000:9090 -e initialBuckets="saasplatform-backups,pre-migration-backups" --name s3mock adobe/s3mock
           sleep 10
 
-          # Opret buckets (s3mock understoetter standard S3 PutBucket)
-          curl -sf -X PUT http://localhost:9000/saasplatform-backups
-          curl -sf -X PUT http://localhost:9000/pre-migration-backups
 
       - name: Install cert-manager
         run: |
@@ -106,12 +103,9 @@ jobs:
         run: |
           # MinIO er ikke laengere offentligt tilgaengeligt (docker.io + quay.io kraever
           # login siden 2025) -- CI bruger adobe/s3mock som S3-API-mock i stedet.
-          docker run -d -p 9000:9090 --name s3mock adobe/s3mock
+          docker run -d -p 9000:9090 -e initialBuckets="saasplatform-backups,pre-migration-backups" --name s3mock adobe/s3mock
           sleep 10
 
-          # Opret buckets (s3mock understoetter standard S3 PutBucket)
-          curl -sf -X PUT http://localhost:9000/saasplatform-backups
-          curl -sf -X PUT http://localhost:9000/pre-migration-backups
 
       - name: Install cert-manager
         run: |
@@ -205,12 +199,9 @@ jobs:
         run: |
           # MinIO er ikke laengere offentligt tilgaengeligt (docker.io + quay.io kraever
           # login siden 2025) -- CI bruger adobe/s3mock som S3-API-mock i stedet.
-          docker run -d -p 9000:9090 --name s3mock adobe/s3mock
+          docker run -d -p 9000:9090 -e initialBuckets="saasplatform-backups,pre-migration-backups" --name s3mock adobe/s3mock
           sleep 10
 
-          # Opret buckets (s3mock understoetter standard S3 PutBucket)
-          curl -sf -X PUT http://localhost:9000/saasplatform-backups
-          curl -sf -X PUT http://localhost:9000/pre-migration-backups
 
       - name: Create test backup
         run: |
