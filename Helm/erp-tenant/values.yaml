@@ -35,7 +35,14 @@ dolibarr:
     enabled: false
     # Pre-migration snapshot tag (auto-generated)
     preMigrationSnapshot: ""
-  # Security context
+  # Security context -- OPDELT i pod- og container-niveau (FIX): capabilities,
+  # allowPrivilegeEscalation og readOnlyRootFilesystem findes ikke i K8s'
+  # PodSecurityContext-skema. At bruge samme bloek paa begge niveauer fik chartet
+  # til at fejle skemavalidering ved "helm install"/"kubectl apply".
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     runAsNonRoot: true
     readOnlyRootFilesystem: true
