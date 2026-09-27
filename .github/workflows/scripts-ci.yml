@@ -32,7 +32,7 @@ jobs:
           wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           chmod +x /usr/local/bin/yq
 
-      - name: Setup MinIO (S3 mock)
+      - name: Setup S3 mock (adobe/s3mock)
         run: |
           # MinIO er ikke laengere offentligt tilgaengeligt (docker.io + quay.io kraever
           # login siden 2025) -- CI bruger adobe/s3mock som S3-API-mock i stedet.
@@ -42,8 +42,7 @@ jobs:
           # Opret buckets (s3mock understoetter standard S3 PutBucket)
           curl -sf -X PUT http://localhost:9000/saasplatform-backups
           curl -sf -X PUT http://localhost:9000/pre-migration-backups
-          curl -X PUT http://localhost:9000/minioadmin/pre-migration-backups \
-            -H "Host: localhost:9000" || true
+          curl -sf -X PUT http://localhost:9000/pre-migration-backups
 
       - name: Run CI tests
         env:
