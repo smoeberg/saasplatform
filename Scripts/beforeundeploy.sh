@@ -24,9 +24,19 @@ fi
 
 log "info" "Dumper DB fra $DB_POD til $DUMP_FILE"
 
+# Haent DB credentials fra SealedSecret/Secret
+DB_USER=$(kubectl get secret -n "$NAMESPACE" tenant-db -o jsonpath='{.data.username}' | base64 -d 2>/dev/null || echo "")
+DB_PASSWORD=$(kubectl get secret -n "$NAMESPACE" tenant-db -o jsonpath='{.data.password}' | base64 -d 2>/dev/null || echo "")
+
+if [[ -z "$DB_USER" || -z "$DB_PASSWORD" ]]; then
+  log "err" "Kunne ikke hente DB credentials fra tenant-db secret i $NAMESPACE"
+  write_status "preundeploy-backup-failed"
+  exit 1
+fi
+
 # Tag dump med mysqldump --single-transaction for InnoDB-konsistens
 kubectl exec -n "$NAMESPACE" "$DB_POD" -- \
-  sh -c 'mysqldump --single-transaction --all-databases' | gzip > "$DUMP_FILE"
+  sh -c "mysqldump --single-transaction --all-databases -u '$DB_USER' -p'$DB_PASSWORD'" | gzip > "$DUMP_FILE"
 
 log "info" "DB-dump gemt lokalt: $DUMP_FILE"
 

@@ -39,10 +39,14 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "45-dolibarr-configmap.yaml") . | sha256sum | trunc 63 }}
     spec:
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | quote }}
+      {{- end }}
       containers:
         - name: dolibarr
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - containerPort: 80
               name: http

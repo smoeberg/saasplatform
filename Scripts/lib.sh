@@ -67,7 +67,12 @@ mkdir -p "$DUMP_DIR"
 log() {
   local level="$1"; shift
   local msg="[$NAMESPACE] $*"
-  logger -t saasplatform-k8s -p "user.${level}" "$msg" 2>/dev/null || true
+  # Fix: syslog prioritet - 'warn' er ugyldig, brug 'warning'
+  local syslog_level="$level"
+  if [[ "$syslog_level" == "warn" ]]; then
+    syslog_level="warning"
+  fi
+  logger -t saasplatform-k8s -p "user.${syslog_level}" "$msg" 2>/dev/null || true
   echo "$(date -Is) [$level] $msg"
 }
 

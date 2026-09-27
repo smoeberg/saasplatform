@@ -14,6 +14,12 @@ image:
   tag: "23.0.1"
   # For rollback: previous version to restore
   previousTag: ""
+  pullPolicy: IfNotPresent
+
+# Image pull secrets for private registry (GHCR)
+imagePullSecrets:
+  enabled: true
+  name: "ghcr-pull-secret"
 
 # Dolibarr configuration
 dolibarr:
