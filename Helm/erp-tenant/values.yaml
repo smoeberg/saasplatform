@@ -35,6 +35,18 @@ dolibarr:
     enabled: false
     # Pre-migration snapshot tag (auto-generated)
     preMigrationSnapshot: ""
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  # Replica count (limited to 1 due to ReadWriteOnce PVC)
+  replicaCount: 1
 
 # MariaDB database
 db:
@@ -48,6 +60,20 @@ db:
     limits:
       cpu: "1"
       memory: 1Gi
+  # Security context for MariaDB
+  securityContext:
+    runAsNonRoot: true
+    readOnlyRootFilesystem: false  # MariaDB needs to write to /var/lib/mysql
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  # Pod security context
+  podSecurityContext:
+    fsGroup: 1001
+    fsGroupChangePolicy: OnRootMismatch
 
 # Ingress configuration
 ingress:

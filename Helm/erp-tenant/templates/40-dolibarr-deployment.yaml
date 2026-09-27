@@ -43,6 +43,12 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.imagePullSecrets.name | quote }}
       {{- end }}
+      {{- if .Values.imagePullSecrets.enabled }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets.name | quote }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.dolibarr.securityContext | nindent 8 }}
       containers:
         - name: dolibarr
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -50,6 +56,8 @@ spec:
           ports:
             - containerPort: 80
               name: http
+          securityContext:
+            {{- toYaml .Values.dolibarr.securityContext | nindent 12 }}
           env:
             - name: DOLI_DB_HOST
               value: "mariadb.{{ .Release.Namespace }}.svc.cluster.local"

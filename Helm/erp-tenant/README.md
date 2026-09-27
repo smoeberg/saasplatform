@@ -35,6 +35,7 @@ Per-tenant Dolibarr ERP deployment for saasplatform.
 | `image.previousTag` | string | `""` | Previous version for rollback |
 | `dolibarr.resources` | object | `{requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: "2", memory: 1Gi}}` | Dolibarr resource requests/limits |
 | `dolibarr.migration.enabled` | bool | `false` | Enable migration mode |
+| `dolibarr.replicaCount` | int | `1` | Number of replicas (NOTE: currently limited to 1 due to ReadWriteOnce PVC) |
 | `dolibarr.migration.preMigrationSnapshot` | string | `""` | Pre-migration snapshot name |
 | `db.enabled` | bool | `true` | Enable MariaDB |
 | `db.storage` | string | `"5Gi"` | MariaDB storage size |
@@ -83,3 +84,25 @@ helm upgrade tenant-123 ./erp-tenant \
   --reuse-values \
   --set suspended=false
 ```
+
+## Limitations
+
+### Replica Count
+**Important:** The `replicaCount` value is currently **limited to 1** due to the documents PVC using `ReadWriteOnce` access mode. 
+Setting `replicaCount > 1` will result in pods being unable to schedule (or only scheduling on the same node, depending on CSI driver).
+
+To enable horizontal scaling in the future:
+1. Change documents PVC to use `ReadWriteMany` access mode (requires compatible storage backend)
+2. Or implement shared storage solution (NFS, CephFS, etc.)
+
+Until then, `replicaCount` should remain at 1.
+
+### Storage
+- Each tenant gets its own MariaDB StatefulSet with dedicated PVC
+- Documents PVC is ReadWriteOnce (single pod access)
+- Backup PVCs use emptyDir with size limits
+
+### Security
+- All secrets are managed via SealedSecrets
+- NetworkPolicy defaults to deny-all with selective egress
+- ResourceQuota enforced per tenant namespace

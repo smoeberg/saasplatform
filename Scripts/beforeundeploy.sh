@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# beforeundeploy.sh — Sikkerhedsnet før permanent nedlæggelse: 
+# beforeundeploy.sh -- Sikkerhedsnet for permanent nedlaeggelse: 
 # tager DB-dump og uploader til S3 (Wasabi)
 
 source "$(dirname "$0")/lib.sh" "$@"
 
 if ! release_exists; then
-  log "warn" "Release $RELEASE findes ikke — intet at sikkerhedskopiere, fortsætter"
+  log "warn" "Release $RELEASE findes ikke -- intet at sikkerhedskopiere, fortsaetter"
   write_status "preundeploy-backup-ok"
   exit 0
 fi
@@ -17,7 +17,7 @@ DB_POD="$(kubectl get pod -n "$NAMESPACE" -l app.kubernetes.io/component=db \
   -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 
 if [[ -z "$DB_POD" ]]; then
-  log "warn" "Fandt ingen DB-pod i $NAMESPACE (label app=mariadb) — springer dump over"
+  log "warn" "Fandt ingen DB-pod i $NAMESPACE (label app=mariadb) -- springer dump over"
   write_status "preundeploy-backup-skipped"
   exit 0
 fi
@@ -49,7 +49,7 @@ if [[ -n "$S3_ENDPOINT" && -n "$S3_BUCKET" ]]; then
   rm -f "$DUMP_FILE"
   log "info" "Lokal dump slettet efter S3-upload"
 else
-  log "warn" "S3 ikke konfigureret — dump forbliver lokalt: $DUMP_FILE"
+  log "warn" "S3 ikke konfigureret -- dump forbliver lokalt: $DUMP_FILE"
 fi
 
 write_status "preundeploy-backup-ok"

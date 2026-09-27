@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# unsuspend.sh - SellYourSaaS action: genoptager tenant
+# afterunsuspend.sh - SellYourSaaS action: afterunsuspend
+# Unsuspend tenant via Helm
 
 source "$(dirname "$0")/lib.sh" "$@"
 
@@ -26,4 +27,4 @@ log "info" "CronJobs genskabt via Helm upgrade"
 wait_for_healthz "$(tenant_healthz_url)"
 
 write_status "deployed"
-log "info" "unsuspend fuldfort for $RELEASE"
+log "info" "afterunsuspend fuldfort for $RELEASE"

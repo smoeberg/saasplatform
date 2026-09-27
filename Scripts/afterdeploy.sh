@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# deploy.sh - SellYourSaaS action: deploy
-# Arkitektur 3.3.1 (mapping+secrets), 5 fase 1b (DNS)
+# afterdeploy.sh - SellYourSaaS action: afterdeploy
+# Deploy tenant and wait for healthz
 
 source "$(dirname "$0")/lib.sh" "$@"
 
@@ -36,4 +36,4 @@ dns_create "$NAMESPACE"
 wait_for_healthz "$(tenant_healthz_url)"
 
 write_status "deployed"
-log "info" "deploy fuldfort for $RELEASE -> ${SELLYOURSAAS_DOLIBARRINSTANCE_URL}"
+log "info" "afterdeploy fuldfort for $RELEASE -> ${SELLYOURSAAS_DOLIBARRINSTANCE_URL}"

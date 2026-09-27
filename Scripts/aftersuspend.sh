@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# suspend.sh - SellYourSaaS action: suspender tenant
+# aftersuspend.sh - SellYourSaaS action: aftersuspend
+# Suspend tenant via Helm
 
 source "$(dirname "$0")/lib.sh" "$@"
 
@@ -24,4 +25,4 @@ helm upgrade "$RELEASE" "$CHART_DIR" \
   --wait --timeout 3m
 
 write_status "suspended"
-log "info" "suspend fuldfort for $RELEASE"
+log "info" "aftersuspend fuldfort for $RELEASE"

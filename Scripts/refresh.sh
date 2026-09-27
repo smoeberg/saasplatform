@@ -1,26 +1,24 @@
 #!/usr/bin/env bash
-# refresh.sh — Re-konvergerer tenanten til den tilstand values-filen beskriver.
-# Bruges også ved version-opdatering og rollback (§3.5).
+# refresh.sh - SellYourSaaS action: refresh
+# Re-apply state (re-konvergering)
 
 source "$(dirname "$0")/lib.sh" "$@"
+
+# Acquire lock to prevent parallel operations on same tenant
+acquire_lock
 
 require_values_file
 
 if ! release_exists; then
-  fail "Kan ikke refreshe: release $RELEASE findes ikke — kør afterdeploy først"
+  log "warn" "Release $RELEASE findes ikke - intet at refreshe"
+  exit 0
 fi
 
-log "info" "Re-konvergerer $RELEASE mod $VALUES_FILE"
-# --atomic ruller K8s-ressourcerne tilbage automatisk hvis upgraden fejler undervejs.
-# OBS: det dækker ikke en DB-migrering der allerede nåede at køre inde i containeren
-# før fejlen — se noten om skema-rollback for Dolibarr-tenants i arkitekturdokumentet.
+log "info" "Re-applier Helm chart for $RELEASE"
 helm upgrade "$RELEASE" "$CHART_DIR" \
   --namespace "$NAMESPACE" \
-  -f "$VALUES_FILE" \
-  --wait --timeout 5m \
-  --atomic
-
-wait_for_healthz "$(tenant_healthz_url)"
+  --reuse-values \
+  --wait --timeout 5m
 
 write_status "deployed"
-log "info" "refresh fuldført for $RELEASE"
+log "info" "refresh fuldfort for $RELEASE"

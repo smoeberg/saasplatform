@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# restore-tenant.sh — Gendan en tenant fra backup (fase 1c exit-kriterium)
-# Arkitektur §3.3: Restore-runbook
+# restore-tenant.sh -- Gendan en tenant fra backup (fase 1c exit-kriterium)
+# Arkitektur ?3.3: Restore-runbook
 #
-# Rækkefølge (ifølge arkitekturdokumentet):
+# Raekkefolge (ifolge arkitekturdokumentet):
 # 1. Opret frisk namespace + helm-install med ingen data (pods stoppet)
-# 2. Indlæs DB-dump (seneste konsistente punkt, valgt pr. tidspunkt)
+# 2. Indlaes DB-dump (seneste konsistente punkt, valgt pr. tidspunkt)
 # 3. Velero-restore af PVC (documents)
-# 4. Start pods; verificér /healthz + login; varsel om manglende match mellem documents og DB
+# 4. Start pods; verificer /healthz + login; varsel om manglende match mellem documents og DB
 
 source "$(dirname "$0")/lib.sh" "$@"
 
@@ -81,7 +81,7 @@ if namespace_exists; then
   if [[ "$FORCE_RESTORE" == "true" ]]; then
     log "warn" "Namespace $NAMESPACE findes allerede - sletter (--force flag sat)..."
     kubectl delete namespace "$NAMESPACE" --wait --timeout=5m --force --grace-period=0 || {
-      log "warn" "Kunne ikke slette namespace - prøver at slette alt i namespace"
+      log "warn" "Kunne ikke slette namespace - prover at slette alt i namespace"
       kubectl delete all --all -n "$NAMESPACE" --wait --timeout=5m --force --grace-period=0 || true
       kubectl delete pvc --all -n "$NAMESPACE" --wait --timeout=5m --force --grace-period=0 || true
       kubectl delete namespace "$NAMESPACE" --wait --timeout=5m --force --grace-period=0 || true
@@ -107,7 +107,7 @@ log "info" "Deployer med suspended=true (pods stoppet)..."
 
 # Opdater values-fil med suspended=true
 yq eval '.suspended = true' -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" 2>/dev/null && mv "${VALUES_FILE}.tmp" "$VALUES_FILE" || {
-  log "warn" "Kunne ikke sætte suspended flag - fortsætter alligevel"
+  log "warn" "Kunne ikke saette suspended flag - fortsaetter alligevel"
 }
 
 helm upgrade --install "$RELEASE" "$CHART_DIR" \
@@ -119,8 +119,8 @@ helm upgrade --install "$RELEASE" "$CHART_DIR" \
 
 log "info" "Namespace og resources oprettet (suspended)"
 
-# ---- Step 7: Vent på DB-pod ----
-log "info" "Venter på DB-pod..."
+# ---- Step 7: Vent pa DB-pod ----
+log "info" "Venter pa DB-pod..."
 
 DB_POD=""
 for i in $(seq 1 12); do
@@ -133,7 +133,7 @@ for i in $(seq 1 12); do
 done
 
 if [[ -z "$DB_POD" ]]; then
-  fail "Kunne ikke finde kørende DB-pod"
+  fail "Kunne ikke finde korende DB-pod"
 fi
 
 log "info" "DB-pod fundet: ${DB_POD}"
@@ -152,9 +152,9 @@ else
   DB_DUMP_FILE="${DUMP_DIR}/${NAMESPACE}-${DB_SNAPSHOT}.sql.gz"
 fi
 
-# Prøv at hente fra S3 først
+# Prov at hente fra S3 forst
 if [[ -n "$S3_ENDPOINT" && -n "$S3_BUCKET" ]]; then
-  log "info" "Prøver at hente DB-dump fra S3: ${S3_DB_PATH}"
+  log "info" "Prover at hente DB-dump fra S3: ${S3_DB_PATH}"
   
   curl -s -X GET "${S3_ENDPOINT}/${S3_BUCKET}/${S3_DB_PATH}" \
     -H "Host: ${S3_BUCKET}.${S3_ENDPOINT#*//}" \
@@ -162,19 +162,19 @@ if [[ -n "$S3_ENDPOINT" && -n "$S3_BUCKET" ]]; then
     -o "$DB_DUMP_FILE" 2>/dev/null
   
   if [[ -f "$DB_DUMP_FILE" && -s "$DB_DUMP_FILE" ]]; then
-    log "info" "✅ DB-dump hentet fra S3"
+    log "info" "? DB-dump hentet fra S3"
   else
-    # Prøv lokal dump
-    log "info" "Prøver lokal DB-dump..."
+    # Prov lokal dump
+    log "info" "Prover lokal DB-dump..."
     DB_DUMP_FILE="${DUMP_DIR}/${NAMESPACE}-${DB_SNAPSHOT}.sql.gz"
     if [[ ! -f "$DB_DUMP_FILE" || ! -s "$DB_DUMP_FILE" ]]; then
-      # Prøv alle dump-filer for denne tenant
+      # Prov alle dump-filer for denne tenant
       DB_DUMP_FILE=$(ls "${DUMP_DIR}/${NAMESPACE}-*.sql.gz" 2>/dev/null | head -1 || echo "")
       if [[ -z "$DB_DUMP_FILE" || ! -f "$DB_DUMP_FILE" ]]; then
         fail "Kunne ikke finde DB-dump (S3: ${S3_DB_PATH}, Lokal: ${DUMP_DIR}/${NAMESPACE}-*.sql.gz)"
       fi
     fi
-    log "info" "✅ DB-dump fundet lokalt: ${DB_DUMP_FILE}"
+    log "info" "? DB-dump fundet lokalt: ${DB_DUMP_FILE}"
   fi
 else
   # Brug lokal dump
@@ -185,32 +185,32 @@ else
       fail "Kunne ikke finde lokal DB-dump"
     fi
   fi
-  log "info" "✅ DB-dump fundet lokalt: ${DB_DUMP_FILE}"
+  log "info" "? DB-dump fundet lokalt: ${DB_DUMP_FILE}"
 fi
 
-# ---- Step 9: Indlæs DB-dump ----
-log "info" "Indlæser DB-dump til ${DB_POD}..."
+# ---- Step 9: Indlaes DB-dump ----
+log "info" "Indlaeser DB-dump til ${DB_POD}..."
 
-# Kopier dump til pod og indlæs
+# Kopier dump til pod og indlaes
 if kubectl cp "$DB_DUMP_FILE" "${NAMESPACE}/${DB_POD}:/tmp/dump.sql.gz" 2>/dev/null; then
   log "info" "Dump kopieret til pod"
   
-  # Indlæs dump
+  # Indlaes dump
   if kubectl exec -n "$NAMESPACE" "$DB_POD" -- \
     sh -c 'gunzip -c /tmp/dump.sql.gz | mysql -u root -p"$(< /var/run/secrets/tenant-db/root_password)"'; then
-    log "info" "✅ DB-dump indlæst"
+    log "info" "? DB-dump indlaest"
   else
-    log "err" "Kunne ikke indlæse DB-dump"
-    # Prøv med base64-decoded password
+    log "err" "Kunne ikke indlaese DB-dump"
+    # Prov med base64-decoded password
     ROOT_PASSWORD=$(kubectl get secret tenant-db -n "$NAMESPACE" -o jsonpath='{.data.root_password}' | base64 -d 2>/dev/null || echo "")
     if [[ -n "$ROOT_PASSWORD" ]]; then
       kubectl exec -n "$NAMESPACE" "$DB_POD" -- \
         sh -c "gunzip -c /tmp/dump.sql.gz | mysql -u root -p'${ROOT_PASSWORD}'" || {
-        log "err" "Kunne ikke indlæse DB-dump med base64 password"
+        log "err" "Kunne ikke indlaese DB-dump med base64 password"
         # Fallback: pipe direkte til pod
         gunzip -c "$DB_DUMP_FILE" | kubectl exec -i -n "$NAMESPACE" "$DB_POD" -- \
           sh -c 'mysql -u root -p"$(< /var/run/secrets/tenant-db/root_password)' || \
-          fail "Alle metoder til indlæsning af DB-dump fejlede"
+          fail "Alle metoder til indlaesning af DB-dump fejlede"
       }
     else
       fail "Kunne ikke hente root_password fra secret"
@@ -225,7 +225,7 @@ else
     if [[ -n "$ROOT_PASSWORD" ]]; then
       gunzip -c "$DB_DUMP_FILE" | kubectl exec -i -n "$NAMESPACE" "$DB_POD" -- \
         sh -c "mysql -u root -p'${ROOT_PASSWORD}'" || \
-        fail "Kunne ikke indlæse DB-dump"
+        fail "Kunne ikke indlaese DB-dump"
     else
       fail "Kunne ikke hente root_password"
     fi
@@ -246,9 +246,9 @@ if [[ -n "$DOC_SNAPSHOT" ]]; then
     --include-resources pvc \
     --wait \
     --timeout 10m 2>/dev/null; then
-    log "info" "✅ Documents PVC gendannet fra Velero"
+    log "info" "? Documents PVC gendannet fra Velero"
   else
-    log "warn" "Velero-restore af documents PVC fejlede - fortsætter uden"
+    log "warn" "Velero-restore af documents PVC fejlede - fortsaetter uden"
   fi
 else
   log "info" "Ingen documents snapshot specificeret - springer Velero-restore over"
@@ -269,10 +269,10 @@ log "info" "Pods startet"
 log "info" "Verificerer tenant health..."
 
 if wait_for_healthz "$(tenant_healthz_url)"; then
-  log "info" "✅ Healthz check bestået"
+  log "info" "? Healthz check bestaet"
 else
-  log "warn" "Healthz check fejlede - tenant kan kræve manuel intervention"
-  # Forsøg at få mere info
+  log "warn" "Healthz check fejlede - tenant kan kraeve manuel intervention"
+  # Forsog at fa mere info
   kubectl get pods -n "$NAMESPACE"
   kubectl logs -n "$NAMESPACE" -l app=dolibarr --tail=20 || true
   kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/component=db --tail=20 || true
@@ -280,7 +280,7 @@ fi
 
 # ---- Success ----
 write_status "restored-from-${DB_SNAPSHOT}"
-log "info" "✅ Restore fuldført for $RELEASE"
+log "info" "? Restore fuldfort for $RELEASE"
 log "info" "   DB snapshot: ${DB_SNAPSHOT}"
 log "info" "   Documents snapshot: ${DOC_SNAPSHOT:-ingen}"
 log "info" "   Healthz: OK"

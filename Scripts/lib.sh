@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# lib.sh — fælles funktioner for alle SellYourSaaS "kubernetes"-package remote-action scripts.
+# lib.sh -- faelles funktioner for alle SellYourSaaS "kubernetes"-package remote-action scripts.
 # Alle 8 scripts starter med: source "$(dirname "$0")/lib.sh" "$@"
 #
 # ANTAGELSE DER SKAL VERIFICERES mod jeres faktiske SellYourSaaS-installation:
 # Dette lib antager at agenten kalder scriptet med contract-id som positionsparameter $1.
-# Hvis jeres SellYourSaaS-version i stedet eksporterer det som miljøvariabel (fx
-# $SELLYOURSAAS_INSTANCE_NAME eller lignende — tjek DoliCloud's remote-action-dokumentation), 
-# så vil scriptet bruge miljøvariablen som fallback.
-# Se også README.md i denne mappe for den fulde liste af antagelser.
+# Hvis jeres SellYourSaaS-version i stedet eksporterer det som miljovariabel (fx
+# $SELLYOURSAAS_INSTANCE_NAME eller lignende -- tjek DoliCloud's remote-action-dokumentation), 
+# sa vil scriptet bruge miljovariablen som fallback.
+# Se ogsa README.md i denne mappe for den fulde liste af antagelser.
 
 set -euo pipefail
 
-# ---- Konfiguration (overstyres via miljøvariabler på K8s-runneren, §3.7) ----
+# ---- Konfiguration (overstyres via miljovariabler pa K8s-runneren, ?3.7) ----
 KUBECONFIG="${KUBECONFIG:-/etc/saasplatform/kubeconfig}"
 CHART_DIR="${CHART_DIR:-/opt/saasplatform/Helm/erp-tenant}"
 VALUES_DIR="${VALUES_DIR:-/etc/saasplatform/values}"
 STATUS_DIR="${STATUS_DIR:-/var/lib/saasplatform/status}"
 TENANT_DOMAIN="${TENANT_DOMAIN:-tenants.example.com}"   # ANTAGELSE: ret til jeres faktiske DNS-skema
-HEALTHZ_TIMEOUT="${HEALTHZ_TIMEOUT:-180}"                # sekunder at vente på grønt healthz
+HEALTHZ_TIMEOUT="${HEALTHZ_TIMEOUT:-180}"                # sekunder at vente pa gront healthz
 HEALTHZ_INTERVAL=5
 DUMP_DIR="${DUMP_DIR:-/var/backups/saasplatform/pre-undeploy}"
 
@@ -37,7 +37,7 @@ KUBESEAL_CERT="${KUBESEAL_CERT:-/etc/saasplatform/kubeseal-cert.pem}"
 export KUBECONFIG
 
 # ---- Instans-id ----
-# Prøv positionsparameter $1 først, derefter miljøvariabler
+# Prov positionsparameter $1 forst, derefter miljovariabler
 if [[ $# -ge 1 && -n "$1" ]]; then
   INSTANCE="$1"
 elif [[ -n "${SELLYOURSAAS_INSTANCE_NAME:-}" ]]; then
@@ -45,11 +45,11 @@ elif [[ -n "${SELLYOURSAAS_INSTANCE_NAME:-}" ]]; then
 elif [[ -n "${SELLYOURSAAS_CONTRACT_ID:-}" ]]; then
   INSTANCE="$SELLYOURSAAS_CONTRACT_ID"
 else
-  echo "FATAL: Mangler contract-id som argument 1 eller som miljøvariabel (SELLYOURSAAS_INSTANCE_NAME eller SELLYOURSAAS_CONTRACT_ID)" >&2
+  echo "FATAL: Mangler contract-id som argument 1 eller som miljovariabel (SELLYOURSAAS_INSTANCE_NAME eller SELLYOURSAAS_CONTRACT_ID)" >&2
   exit 2
 fi
 
-# Sanitize: kun a-z, 0-9, bindestreg — undgår ugyldige K8s-navne / injection via navnet
+# Sanitize: kun a-z, 0-9, bindestreg -- undgar ugyldige K8s-navne / injection via navnet
 if [[ ! "$INSTANCE" =~ ^[a-z0-9-]+$ ]]; then
   echo "FATAL: INSTANCE '$INSTANCE' indeholder ugyldige tegn (kun a-z, 0-9, -)" >&2
   exit 2
@@ -62,8 +62,43 @@ STATUS_FILE="${STATUS_DIR}/${NAMESPACE}.status"
 
 mkdir -p "$STATUS_DIR"
 mkdir -p "$DUMP_DIR"
+mkdir -p "$VALUES_DIR"
 
-# ---- Logging: journald (+ evt. fjernt syslog via logger-relæ, §3.7) ----
+# ---- Lock mechanism for parallel execution prevention (designvalg #6) ----
+# Creates a per-instance lock file to prevent concurrent helm/kubectl operations
+# on the same tenant, which could corrupt release history
+LOCK_DIR="${STATUS_DIR}/locks"
+mkdir -p "$LOCK_DIR"
+LOCK_FILE="${LOCK_DIR}/${NAMESPACE}.lock"
+
+# Acquire lock - exits if already locked
+acquire_lock() {
+  # Use flock to acquire exclusive lock (fd 200)
+  exec 200>"$LOCK_FILE"
+  if ! flock -n 200; then
+    log "err" "Tenant $NAMESPACE er allerede laast - vent eller prov igen senere"
+    exit 1
+  fi
+  # Lock acquired - store PID for debugging
+  echo $$ > "$LOCK_FILE"
+  log "debug" "Lock acquired for $NAMESPACE (PID: $$)"
+}
+
+# Release lock (called automatically on exit)
+release_lock() {
+  if [[ -f "$LOCK_FILE" ]]; then
+    # Check if this process owns the lock
+    if [[ "$(cat "$LOCK_FILE" 2>/dev/null)" == "$$" ]]; then
+      rm -f "$LOCK_FILE"
+      log "debug" "Lock released for $NAMESPACE"
+    fi
+  fi
+}
+
+# Register cleanup on exit
+trap release_lock EXIT
+
+# ---- Logging: journald (+ evt. fjernt syslog via logger-relae, ?3.7) ----
 log() {
   local level="$1"; shift
   local msg="[$NAMESPACE] $*"
@@ -85,7 +120,7 @@ trap 'log "err" "Script fejlede ved linje $LINENO (exit-kode $?)"' ERR
 
 # ---- Helpers ----
 require_values_file() {
-  [[ -f "$VALUES_FILE" ]] || fail "Values-fil mangler: $VALUES_FILE (skal være renderet af SellYourSaaS' config-template før scriptet kaldes)"
+  [[ -f "$VALUES_FILE" ]] || fail "Values-fil mangler: $VALUES_FILE (skal vaere renderet af SellYourSaaS' config-template for scriptet kaldes)"
 }
 
 namespace_exists() {
@@ -103,12 +138,12 @@ tenant_healthz_url() {
 wait_for_healthz() {
   local url="$1"
   local waited=0
-  log "info" "Venter på 200 fra $url (timeout ${HEALTHZ_TIMEOUT}s)"
+  log "info" "Venter pa 200 fra $url (timeout ${HEALTHZ_TIMEOUT}s)"
   until curl -fsS -o /dev/null -m 5 "$url"; do
     sleep "$HEALTHZ_INTERVAL"
     waited=$((waited + HEALTHZ_INTERVAL))
     if (( waited >= HEALTHZ_TIMEOUT )); then
-      fail "Healthz aldrig grøn efter ${HEALTHZ_TIMEOUT}s: $url"
+      fail "Healthz aldrig gron efter ${HEALTHZ_TIMEOUT}s: $url"
     fi
   done
   log "info" "Healthz OK efter ${waited}s"
@@ -163,7 +198,7 @@ dns_create() {
   if [[ "$success" == "true" ]]; then
     log "info" "DNS-record oprettet: ${domain} -> ${ip}"
     
-    # Vent på propagation (max 10 minutter)
+    # Vent pa propagation (max 10 minutter)
     local waited=0
     while ! dig +short "${domain}" | grep -q "${ip}"; do
       sleep 10
@@ -173,7 +208,7 @@ dns_create() {
         break
       fi
     done
-    log "info" "DNS propagation bekræftet for ${domain}"
+    log "info" "DNS propagation bekraeftet for ${domain}"
   else
     log "err" "DNS-record oprettelse fejlede for ${domain}: $(echo "$response" | jq -r '.errors[0].message // "ukendt fejl")"
     return 1
@@ -222,7 +257,7 @@ s3_upload() {
   local dest="$2"
   
   if [[ -z "$S3_ENDPOINT" || -z "$S3_BUCKET" || -z "$S3_ACCESS_KEY" || -z "$S3_SECRET_KEY" ]]; then
-    log "warn" "S3 konfiguration ikke fuldstændig - springer upload over"
+    log "warn" "S3 konfiguration ikke fuldstaendig - springer upload over"
     return 0
   fi
   
@@ -278,30 +313,30 @@ create_sealed_secret() {
 
 # ---- Namespace resolution (extrafields) ----
 resolve_namespace() {
-  # Prøv at læse fra extrafields i Dolibarr (via API)
+  # Prov at laese fra extrafields i Dolibarr (via API)
   # For nu: brug standard mapping
   echo "tenant-${INSTANCE}"
 }
 
 # ---- Migration helpers ----
 check_migration_required() {
-  # Tjek om den nye version kræver DB-migrering
+  # Tjek om den nye version kraever DB-migrering
   local new_version="$1"
   local current_version=$(helm get values "$RELEASE" -n "$NAMESPACE" -o json 2>/dev/null | jq -r '.image.tag // ""' || echo "")
   
   if [[ "$new_version" == "$current_version" ]]; then
-    return 1  # Ingen migrering nødvendig
+    return 1  # Ingen migrering nodvendig
   fi
   
   # Tjek om versionerne indikerer en migrering
-  # (Dolibarr major/minor version ændring)
+  # (Dolibarr major/minor version aendring)
   local new_major=$(echo "$new_version" | cut -d. -f1)
   local new_minor=$(echo "$new_version" | cut -d. -f2)
   local current_major=$(echo "$current_version" | cut -d. -f1)
   local current_minor=$(echo "$current_version" | cut -d. -f2)
   
   if [[ "$new_major" != "$current_major" || "$new_minor" != "$current_minor" ]]; then
-    return 0  # Migrering nødvendig
+    return 0  # Migrering nodvendig
   fi
   
   return 1  # Ingen migrering
@@ -318,7 +353,7 @@ get_pre_migration_snapshot() {
   fi
   
   # List filer i S3 (simplificeret - i praksis brug AWS CLI eller lignende)
-  # For nu: returner det der står i values-filen
+  # For nu: returner det der star i values-filen
   if [[ -f "$VALUES_FILE" ]]; then
     yq eval '.dolibarr.migration.preMigrationSnapshot // ""' "$VALUES_FILE"
   else

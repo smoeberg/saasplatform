@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # canary-rollout.sh - Canary-rollout rutine for Dolibarr-opdateringer
-# Arkitektur §3.5: Canary-algoritme for opdateringer
+# Arkitektur ?3.5: Canary-algoritme for opdateringer
 #
 # Algoritme:
-# 1. Tenants grupperes pr. strata (plan × deployment-server)
+# 1. Tenants grupperes pr. strata (plan x deployment-server)
 # 2. Inden for hvert stratum: tenants sorteres pr. kontrakt-id
 # 3. Rotationsindeks gemmes i Dolibarr (extrafield)
-# 4. Næste canary = indeks mod N, derefter indeks+1 osv.
+# 4. Naeste canary = indeks mod N, derefter indeks+1 osv.
 # 5. Med 10 tenants og 5-10% canary: 1 tenant pr. gang
-# 6. Rotationen sikrer at alle gennemgår canary over tid
+# 6. Rotationen sikrer at alle gennemgar canary over tid
 
 set -euo pipefail
 
@@ -34,8 +34,8 @@ for ns in $TENANT_NAMESPACES; do
   # Ekstraher contract-id fra namespace
   CONTRACT_ID="${ns#tenant-}"
   
-  # Tjek om tenant hører til dette strata
-  # For nu: antag alle hører til standard
+  # Tjek om tenant horer til dette strata
+  # For nu: antag alle horer til standard
   FILTERED_TENANTS+=("$ns")
 done
 
@@ -67,7 +67,7 @@ else
   CURRENT_INDEX=0
 fi
 
-echo "Nuværende rotationsindeks: $CURRENT_INDEX"
+echo "Nuvaerende rotationsindeks: $CURRENT_INDEX"
 
 # Beregn hvilke tenants der skal opdateres
 CANARY_TENANTS=()
@@ -107,7 +107,7 @@ for ns in "${CANARY_TENANTS[@]}"; do
   CURRENT_VERSION=$(helm get values "tenant" -n "$ns" -o json 2>/dev/null | jq -r '.image.tag // ""' || echo "")
   
   if [[ "$NEW_VERSION" == "$CURRENT_VERSION" ]]; then
-    echo "  Ingen versionsændring for $ns"
+    echo "  Ingen versionsaendring for $ns"
     continue
   fi
   
@@ -115,7 +115,7 @@ for ns in "${CANARY_TENANTS[@]}"; do
   if [[ "$NEW_VERSION" != "$CURRENT_VERSION" ]]; then
     echo "  Tager pre-migration snapshot..."
     if ! SELLYOURSAAS_INSTANCE_NAME="$CONTRACT_ID" SELLYOURSAAS_VERSION="$NEW_VERSION" bash "$(dirname "$0")/migrate.sh" "$CONTRACT_ID"; then
-      echo "  ✗ Pre-migration snapshot fejlede for $ns"
+      echo "  ? Pre-migration snapshot fejlede for $ns"
       FAILED=$((FAILED+1))
       continue
     fi
@@ -129,20 +129,20 @@ for ns in "${CANARY_TENANTS[@]}"; do
     yq eval ".image.tag = \"$NEW_VERSION\"" -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" && mv "${VALUES_FILE}.tmp" "$VALUES_FILE"
   fi
   
-  # Kør refresh (helm upgrade)
+  # Kor refresh (helm upgrade)
   if SELLYOURSAAS_INSTANCE_NAME="$CONTRACT_ID" SELLYOURSAAS_VERSION="$NEW_VERSION" bash "$(dirname "$0")/refresh.sh" "$CONTRACT_ID"; then
-    echo "  ✓ Canary tenant $ns opdateret til version $NEW_VERSION"
+    echo "  ? Canary tenant $ns opdateret til version $NEW_VERSION"
     SUCCESS=$((SUCCESS+1))
   else
-    echo "  ✗ Canary tenant $ns fejlede"
+    echo "  ? Canary tenant $ns fejlede"
     FAILED=$((FAILED+1))
     
-    # Forsøg rollback
-    echo "  Forsøger rollback..."
+    # Forsog rollback
+    echo "  Forsoger rollback..."
     if SELLYOURSAAS_INSTANCE_NAME="$CONTRACT_ID" bash "$(dirname "$0")/rollback.sh" "$CONTRACT_ID"; then
-      echo "  ✓ Rollback lykkedes for $ns"
+      echo "  ? Rollback lykkedes for $ns"
     else
-      echo "  ✗ Rollback fejlede for $ns - manuel intervention nødvendig"
+      echo "  ? Rollback fejlede for $ns - manuel intervention nodvendig"
     fi
   fi
 done
@@ -155,16 +155,16 @@ NEW_INDEX=$(( (CURRENT_INDEX + CANARY_COUNT) % TOTAL_TENANTS ))
 echo "Nyt rotationsindeks: $NEW_INDEX"
 echo "$NEW_INDEX" > "$INDEX_FILE"
 
-# Hvis alle canary tenants lykkedes, fortsæt med fuld rollout
+# Hvis alle canary tenants lykkedes, fortsaet med fuld rollout
 if [[ $FAILED -eq 0 ]]; then
   echo ""
-  echo "Alle canary tenants opdateret - fortsætter med fuld rollout"
+  echo "Alle canary tenants opdateret - fortsaetter med fuld rollout"
   
-  # Vent på canary-vindue (se §3.5)
-  # Vindue = maks. (observed migrationsvarighed × 3, 30 min.)
+  # Vent pa canary-vindue (se ?3.5)
+  # Vindue = maks. (observed migrationsvarighed x 3, 30 min.)
   CANARY_WINDOW=$(( 30 * 60 ))  # 30 minutter default
   
-  echo "Venter på canary-vindue: ${CANARY_WINDOW}s"
+  echo "Venter pa canary-vindue: ${CANARY_WINDOW}s"
   sleep $CANARY_WINDOW
   
   # Verificer alle canary tenants er sunde
@@ -174,7 +174,7 @@ if [[ $FAILED -eq 0 ]]; then
     HEALTHZ_URL="https://${CONTRACT_ID}.${TENANT_DOMAIN:-tenants.example.com}/healthz"
     
     if ! curl -fsS -o /dev/null -m 5 "$HEALTHZ_URL"; then
-      echo "  ✗ Canary tenant $ns er ikke sund"
+      echo "  ? Canary tenant $ns er ikke sund"
       ALL_HEALTHY=false
       break
     fi
@@ -202,27 +202,27 @@ if [[ $FAILED -eq 0 ]]; then
         yq eval ".image.tag = \"$NEW_VERSION\"" -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" && mv "${VALUES_FILE}.tmp" "$VALUES_FILE"
       fi
       
-      # Kør refresh
+      # Kor refresh
       if SELLYOURSAAS_INSTANCE_NAME="$CONTRACT_ID" SELLYOURSAAS_VERSION="$NEW_VERSION" bash "$(dirname "$0")/refresh.sh" "$CONTRACT_ID"; then
-        echo "  ✓ Tenant $ns opdateret"
+        echo "  ? Tenant $ns opdateret"
       else
-        echo "  ✗ Tenant $ns fejlede"
+        echo "  ? Tenant $ns fejlede"
         FAILED=$((FAILED+1))
       fi
     done
     
     echo ""
-    echo "Fuld rollout fuldført: $((SUCCESS + ${#REMAINING_TENANTS[@]} - FAILED)) success, $FAILED failed"
+    echo "Fuld rollout fuldfort: $((SUCCESS + ${#REMAINING_TENANTS[@]} - FAILED)) success, $FAILED failed"
   else
     echo ""
-    echo "⚠️  Canary tenants ikke alle sunde - afbryder fuld rollout"
+    echo "?  Canary tenants ikke alle sunde - afbryder fuld rollout"
     exit 1
   fi
 else
   echo ""
-  echo "❌ Canary-rollout fejlede - $FAILED tenants"
+  echo "? Canary-rollout fejlede - $FAILED tenants"
   exit 1
 fi
 
 echo ""
-echo "✅ Canary-rollout fuldført"
+echo "? Canary-rollout fuldfort"

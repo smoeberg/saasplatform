@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# rollback.sh — Gendan tenant til tidligere version efter fejlet migrering
-# Arkitektur §3.5: DB-migreringer kræver rollback-procedure
+# rollback.sh -- Gendan tenant til tidligere version efter fejlet migrering
+# Arkitektur ?3.5: DB-migreringer kraever rollback-procedure
 #
-# Rollback-procedure (fra arkitekturdokumentet §3.5.2):
+# Rollback-procedure (fra arkitekturdokumentet ?3.5.2):
 # 1. Gendan pre-migration snapshot
-# 2. Sæt tidligere image-version
+# 2. Saet tidligere image-version
 #
 # Hvis der ikke findes et pre-migration snapshot:
-# - Prøv at bruge seneste natlige backup
-# - Hvis ingen backup findes: fail-closed (manuel intervention nødvendig)
+# - Prov at bruge seneste natlige backup
+# - Hvis ingen backup findes: fail-closed (manuel intervention nodvendig)
 
 source "$(dirname "$0")/lib.sh" "$@"
 
@@ -40,31 +40,31 @@ done
 
 require_values_file
 
-# ---- Læs rollback-indstillinger fra values ----
+# ---- Laes rollback-indstillinger fra values ----
 ROLLBACK_ENABLED=$(yq eval '.rollback.enabled // false' "$VALUES_FILE" 2>/dev/null || echo "false")
 
-# Hvis ingen target-version er angivet, prøv at læse fra values
+# Hvis ingen target-version er angivet, prov at laese fra values
 if [[ -z "$TARGET_VERSION" ]]; then
   TARGET_VERSION=$(yq eval '.rollback.targetVersion // ""' "$VALUES_FILE" 2>/dev/null || echo "")
 fi
 
-# Hvis ingen snapshot er angivet, prøv at læse fra values
+# Hvis ingen snapshot er angivet, prov at laese fra values
 if [[ -z "$SNAPSHOT" ]]; then
   SNAPSHOT=$(yq eval '.rollback.restoreFromSnapshot // ""' "$VALUES_FILE" 2>/dev/null || echo "")
 fi
 
-# Hvis ingen snapshot, prøv at finde seneste pre-migration snapshot
+# Hvis ingen snapshot, prov at finde seneste pre-migration snapshot
 if [[ -z "$SNAPSHOT" ]]; then
   SNAPSHOT=$(yq eval '.dolibarr.migration.preMigrationSnapshot // ""' "$VALUES_FILE" 2>/dev/null || echo "")
 fi
 
 # ---- Valider input ----
 if [[ -z "$TARGET_VERSION" ]]; then
-  fail "Rollback kræver targetVersion (brug --target-version)"
+  fail "Rollback kraever targetVersion (brug --target-version)"
 fi
 
 if [[ "$ROLLBACK_ENABLED" != "true" && "$FORCE" != "true" ]]; then
-  log "info" "Rollback ikke aktiveret i values og --force ikke angivet - intet at gøre"
+  log "info" "Rollback ikke aktiveret i values og --force ikke angivet - intet at gore"
   write_status "rollback-not-needed"
   exit 0
 fi
@@ -73,7 +73,7 @@ log "info" "Starter rollback til version: ${TARGET_VERSION}"
 if [[ -n "$SNAPSHOT" ]]; then
   log "info" "Restore fra snapshot: ${SNAPSHOT}"
 else
-  log "warn" "Ingen snapshot specificeret - vil prøve at finde en"
+  log "warn" "Ingen snapshot specificeret - vil prove at finde en"
 fi
 
 # ---- Step 1: Find snapshot ----
@@ -89,10 +89,10 @@ if [[ -n "$SNAPSHOT" ]]; then
   fi
   LOCAL_DUMP="${DUMP_DIR}/${SNAPSHOT}.sql.gz"
 else
-  # Prøv at finde seneste pre-migration snapshot for denne tenant
+  # Prov at finde seneste pre-migration snapshot for denne tenant
   if [[ -n "$S3_ENDPOINT" && -n "$S3_BUCKET" ]]; then
     # Liste filer i S3 (simplificeret - i praksis brug S3 API)
-    # For nu: prøv at bruge values-filens preMigrationSnapshot
+    # For nu: prov at bruge values-filens preMigrationSnapshot
     PRE_MIGRATION_SNAPSHOT=$(yq eval '.dolibarr.migration.preMigrationSnapshot // ""' "$VALUES_FILE" 2>/dev/null || echo "")
     if [[ -n "$PRE_MIGRATION_SNAPSHOT" ]]; then
       S3_PATH="${S3_PRE_MIGRATION_BUCKET:-pre-migration-backups}/${NAMESPACE}/${PRE_MIGRATION_SNAPSHOT}.sql.gz"
@@ -102,7 +102,7 @@ else
       fail "Ingen snapshot fundet - brug --snapshot for at specificere"
     fi
   else
-    # Prøv lokal dump
+    # Prov lokal dump
     PRE_MIGRATION_SNAPSHOT=$(ls -t "${DUMP_DIR}/${NAMESPACE}-pre-migration-*.sql.gz" 2>/dev/null | head -1 || echo "")
     if [[ -n "$PRE_MIGRATION_SNAPSHOT" ]]; then
       LOCAL_DUMP="$PRE_MIGRATION_SNAPSHOT"
@@ -115,12 +115,12 @@ fi
 
 log "info" "Brugere snapshot: ${SNAPSHOT}"
 
-# ---- Step 2: Undeploy nuværende version ----
-log "info" "Afinstallerer nuværende release..."
+# ---- Step 2: Undeploy nuvaerende version ----
+log "info" "Afinstallerer nuvaerende release..."
 
 if release_exists; then
   helm uninstall "$RELEASE" -n "$NAMESPACE" --wait --timeout 5m || {
-    log "warn" "Kunne ikke afinstallere release - prøver at slette manuelt"
+    log "warn" "Kunne ikke afinstallere release - prover at slette manuelt"
     kubectl delete all --all -n "$NAMESPACE" --wait --timeout=5m --force --grace-period=0 || true
   }
 else
@@ -140,11 +140,11 @@ if [[ -n "$S3_PATH" && -n "$S3_ENDPOINT" && -n "$S3_BUCKET" ]]; then
     fail "Kunne ikke hente snapshot fra S3: ${S3_PATH}"
   fi
   
-  log "info" "✅ Snapshot hentet fra S3: $LOCAL_DUMP"
+  log "info" "? Snapshot hentet fra S3: $LOCAL_DUMP"
 else
   # Brug lokal dump
   if [[ -f "$LOCAL_DUMP" ]]; then
-    log "info" "✅ Brugere lokal snapshot: $LOCAL_DUMP"
+    log "info" "? Brugere lokal snapshot: $LOCAL_DUMP"
   else
     fail "Kunne ikke finde snapshot (S3: ${S3_PATH}, Lokal: ${LOCAL_DUMP})"
   fi
@@ -156,7 +156,7 @@ log "info" "Genopretter til version ${TARGET_VERSION}..."
 # Opdater values-filen med target version
 log "info" "Opdaterer values-fil..."
 
-# Gem nuværende version som previousTag
+# Gem nuvaerende version som previousTag
 CURRENT_VERSION=$(yq eval '.image.tag // ""' "$VALUES_FILE" 2>/dev/null || echo "")
 if [[ -n "$CURRENT_VERSION" ]]; then
   yq eval '.image.previousTag = "'"$CURRENT_VERSION""'" -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" 2>/dev/null && mv "${VALUES_FILE}.tmp" "$VALUES_FILE" || {
@@ -164,9 +164,9 @@ if [[ -n "$CURRENT_VERSION" ]]; then
   }
 fi
 
-# Sæt ny version
+# Saet ny version
 yq eval '.image.tag = "'"$TARGET_VERSION""'" -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" 2>/dev/null && mv "${VALUES_FILE}.tmp" "$VALUES_FILE" || {
-  log "warn" "Kunne ikke sætte image.tag"
+  log "warn" "Kunne ikke saette image.tag"
 }
 
 # Deaktiver migration flag
@@ -186,8 +186,8 @@ helm upgrade --install "$RELEASE" "$CHART_DIR" \
 
 log "info" "Namespace og resources oprettet (suspended)"
 
-# ---- Step 6: Vent på DB-pod ----
-log "info" "Venter på DB-pod..."
+# ---- Step 6: Vent pa DB-pod ----
+log "info" "Venter pa DB-pod..."
 
 DB_POD=""
 for i in $(seq 1 12); do
@@ -200,7 +200,7 @@ for i in $(seq 1 12); do
 done
 
 if [[ -z "$DB_POD" ]]; then
-  fail "Kunne ikke finde kørende DB-pod"
+  fail "Kunne ikke finde korende DB-pod"
 fi
 
 log "info" "DB-pod fundet: ${DB_POD}"
@@ -208,18 +208,18 @@ log "info" "DB-pod fundet: ${DB_POD}"
 # ---- Step 7: Restore DB fra snapshot ----
 log "info" "Restorer DB fra snapshot..."
 
-# Indlæs dump
+# Indlaes dump
 if kubectl cp "$LOCAL_DUMP" "${NAMESPACE}/${DB_POD}:/tmp/dump.sql.gz" 2>/dev/null; then
   if kubectl exec -n "$NAMESPACE" "$DB_POD" -- \
     sh -c 'gunzip -c /tmp/dump.sql.gz | mysql -u root -p"$(< /var/run/secrets/tenant-db/root_password)"'; then
-    log "info" "✅ DB-dump indlæst"
+    log "info" "? DB-dump indlaest"
   else
-    # Prøv med base64 password
+    # Prov med base64 password
     ROOT_PASSWORD=$(kubectl get secret tenant-db -n "$NAMESPACE" -o jsonpath='{.data.root_password}' | base64 -d 2>/dev/null || echo "")
     if [[ -n "$ROOT_PASSWORD" ]]; then
       kubectl exec -n "$NAMESPACE" "$DB_POD" -- \
         sh -c "gunzip -c /tmp/dump.sql.gz | mysql -u root -p'${ROOT_PASSWORD}'" || {
-        fail "Kunne ikke indlæse DB-dump"
+        fail "Kunne ikke indlaese DB-dump"
       }
     else
       fail "Kunne ikke hente root_password"
@@ -229,7 +229,7 @@ else
   # Fallback: pipe direkte
   gunzip -c "$LOCAL_DUMP" | kubectl exec -i -n "$NAMESPACE" "$DB_POD" -- \
     sh -c 'mysql -u root -p"$(< /var/run/secrets/tenant-db/root_password)' || {
-    fail "Kunne ikke indlæse DB-dump"
+    fail "Kunne ikke indlaese DB-dump"
   }
 fi
 
@@ -252,7 +252,7 @@ log "info" "Pods startet"
 log "info" "Verificerer tenant health..."
 
 if wait_for_healthz "$(tenant_healthz_url)"; then
-  log "info" "✅ Healthz check bestået"
+  log "info" "? Healthz check bestaet"
 else
   log "warn" "Healthz check fejlede"
   kubectl get pods -n "$NAMESPACE"
@@ -277,6 +277,6 @@ yq eval '.rollback.restoreFromSnapshot = ""' -i "$VALUES_FILE" > "${VALUES_FILE}
 
 # ---- Success ----
 write_status "rolled-back-to-${TARGET_VERSION}"
-log "info" "✅ Rollback fuldført til version ${TARGET_VERSION}"
+log "info" "? Rollback fuldfort til version ${TARGET_VERSION}"
 log "info" "   Snapshot: ${SNAPSHOT}"
 log "info" "   Healthz: OK"

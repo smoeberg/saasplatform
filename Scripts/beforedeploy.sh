@@ -10,6 +10,9 @@
 
 source "$(dirname "$0")/lib.sh" "$@"
 
+# Acquire lock to prevent parallel operations on same tenant
+acquire_lock
+
 log "info" "Starter pre-flight validation for $NAMESPACE"
 
 # =============================================================================

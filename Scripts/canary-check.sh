@@ -10,9 +10,9 @@ source "$(dirname "$0")/lib.sh" "$@"
 HEALTHZ_URL="$(tenant_healthz_url)"
 
 if curl -fsS -o /dev/null -m 5 "$HEALTHZ_URL"; then
-  echo "✓ Healthz OK"
+  echo "? Healthz OK"
   exit 0
 else
-  echo "✗ Healthz fejlede"
+  echo "? Healthz fejlede"
   exit 1
 fi

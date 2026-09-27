@@ -12,17 +12,17 @@ NEW_VERSION="${SELLYOURSAAS_VERSION:-}"
 CURRENT_VERSION=$(helm get values "$RELEASE" -n "$NAMESPACE" -o json 2>/dev/null | jq -r '.image.tag // ""' || echo "")
 
 if [[ "$NEW_VERSION" == "$CURRENT_VERSION" ]]; then
-  log "info" "Ingen versionsændring - intet at gøre"
+  log "info" "Ingen versionsaendring - intet at gore"
   write_status "update-not-needed"
   exit 0
 fi
 
 log "info" "Opdaterer tenant $INSTANCE fra $CURRENT_VERSION til $NEW_VERSION"
 
-# Tjek om dette er en migrerende version (DB ændring)
+# Tjek om dette er en migrerende version (DB aendring)
 if [[ "$NEW_VERSION" != "$CURRENT_VERSION" ]]; then
-  # Kør migrering (tager pre-migration snapshot)
-  log "info" "Kører migrering..."
+  # Kor migrering (tager pre-migration snapshot)
+  log "info" "Korer migrering..."
   if ! bash "$(dirname "$0")/migrate.sh" "$INSTANCE"; then
     fail "Migrering fejlede"
   fi
@@ -32,11 +32,11 @@ fi
 log "info" "Opdaterer values-fil..."
 yq eval ".image.tag = \"$NEW_VERSION\"" -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" && mv "${VALUES_FILE}.tmp" "$VALUES_FILE"
 
-# Kør refresh (helm upgrade)
-log "info" "Kører refresh..."
+# Kor refresh (helm upgrade)
+log "info" "Korer refresh..."
 if ! bash "$(dirname "$0")/refresh.sh" "$INSTANCE"; then
-  # Forsøg rollback
-  log "err" "Opdatering fejlede - forsøger rollback..."
+  # Forsog rollback
+  log "err" "Opdatering fejlede - forsoger rollback..."
   if ! bash "$(dirname "$0")/rollback.sh" "$INSTANCE"; then
     fail "Opdatering og rollback fejlede"
   fi

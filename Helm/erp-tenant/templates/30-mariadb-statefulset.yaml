@@ -25,10 +25,18 @@ spec:
         tenant: {{ .Values.instance | quote }}
         app.kubernetes.io/managed-by: saasplatform
     spec:
+      {{- if .Values.db.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.db.podSecurityContext | nindent 8 }}
+      {{- end }}
       containers:
         - name: mariadb
           image: mariadb:11.4
           imagePullPolicy: IfNotPresent
+          {{- if .Values.db.securityContext }}
+          securityContext:
+            {{- toYaml .Values.db.securityContext | nindent 12 }}
+          {{- end }}
           env:
             - name: MARIADB_DATABASE
               value: dolibarr

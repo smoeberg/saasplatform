@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# recreateauthorizedkeys.sh — SellYourSaaS action: roter platformens adgang
+# recreateauthorizedkeys.sh -- SellYourSaaS action: roter platformens adgang
 
 source "$(dirname "$0")/lib.sh" "$@"
 

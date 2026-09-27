@@ -1,24 +1,32 @@
 #!/usr/bin/env bash
-# afterundeploy.sh — permanent nedlæggelse af tenant. Idempotent: fejler ikke hvis
-# release/namespace allerede er væk, så scriptet trygt kan genkøres (§3.7).
+# afterundeploy.sh - SellYourSaaS action: afterundeploy
+# Cleanup after tenant undeployment
 
 source "$(dirname "$0")/lib.sh" "$@"
 
-if release_exists; then
-  log "info" "Afinstallerer helm-release $RELEASE"
-  helm uninstall "$RELEASE" -n "$NAMESPACE" --wait --timeout 5m
-else
-  log "warn" "Release $RELEASE findes ikke — springer helm uninstall over"
+# Acquire lock to prevent parallel operations on same tenant
+acquire_lock
+
+require_values_file
+
+if ! release_exists; then
+  log "warn" "Release $RELEASE findes ikke - intet at gore"
+  rm -f "$VALUES_FILE"
+  write_status "undeployed"
+  exit 0
 fi
 
-if namespace_exists; then
-  log "info" "Sletter namespace $NAMESPACE"
-  kubectl delete namespace "$NAMESPACE" --wait --timeout=5m
-else
-  log "warn" "Namespace $NAMESPACE findes ikke — springer sletning over"
-fi
+log "info" "Fjerner Helm release $RELEASE"
+helm uninstall "$RELEASE" -n "$NAMESPACE" || true
 
+log "info" "Fjerner namespace $NAMESPACE"
+kubectl delete namespace "$NAMESPACE" --wait=false || true
+
+# Slet values-fil
 rm -f "$VALUES_FILE"
-write_status "undeployed"
 
-log "info" "afterundeploy fuldført for $RELEASE"
+# Slet DNS-record
+dns_delete "$NAMESPACE"
+
+write_status "undeployed"
+log "info" "afterundeploy fuldfort for $RELEASE"
