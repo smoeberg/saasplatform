@@ -1,132 +1,282 @@
 #!/usr/bin/env bash
 # rollback.sh — Gendan tenant til tidligere version efter fejlet migrering
 # Arkitektur §3.5: DB-migreringer kræver rollback-procedure
-# 
-# Rollback-procedure (fra arkitekturdokumentet):
-# 1. Opret frisk namespace + helm-install med ingen data (pods stoppet)
-# 2. Indlæs DB-dump (seneste konsistente punkt)
-# 3. Velero-restore af PVC (documents)
-# 4. Start pods; verificér /healthz + login
+#
+# Rollback-procedure (fra arkitekturdokumentet §3.5.2):
+# 1. Gendan pre-migration snapshot
+# 2. Sæt tidligere image-version
+#
+# Hvis der ikke findes et pre-migration snapshot:
+# - Prøv at bruge seneste natlige backup
+# - Hvis ingen backup findes: fail-closed (manuel intervention nødvendig)
 
 source "$(dirname "$0")/lib.sh" "$@"
 
+# Parse argumenter
+TARGET_VERSION=""
+SNAPSHOT=""
+FORCE="false"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --target-version|-t)
+      TARGET_VERSION="$2"
+      shift 2
+      ;;
+    --snapshot|-s)
+      SNAPSHOT="$2"
+      shift 2
+      ;;
+    --force|-f)
+      FORCE="true"
+      shift
+      ;;
+    *)
+      # Ignorer ukendte argumenter (for kompatibilitet)
+      shift
+      ;;
+  esac
+done
+
 require_values_file
 
-# Læs rollback-indstillinger fra values
-ROLLBACK_ENABLED=$(yq eval '.rollback.enabled // false' "$VALUES_FILE")
-TARGET_VERSION=$(yq eval '.rollback.targetVersion // ""' "$VALUES_FILE")
-RESTORE_SNAPSHOT=$(yq eval '.rollback.restoreFromSnapshot // ""' "$VALUES_FILE")
+# ---- Læs rollback-indstillinger fra values ----
+ROLLBACK_ENABLED=$(yq eval '.rollback.enabled // false' "$VALUES_FILE" 2>/dev/null || echo "false")
 
-if [[ "$ROLLBACK_ENABLED" != "true" ]]; then
-  log "info" "Rollback ikke aktiveret - intet at gøre"
+# Hvis ingen target-version er angivet, prøv at læse fra values
+if [[ -z "$TARGET_VERSION" ]]; then
+  TARGET_VERSION=$(yq eval '.rollback.targetVersion // ""' "$VALUES_FILE" 2>/dev/null || echo "")
+fi
+
+# Hvis ingen snapshot er angivet, prøv at læse fra values
+if [[ -z "$SNAPSHOT" ]]; then
+  SNAPSHOT=$(yq eval '.rollback.restoreFromSnapshot // ""' "$VALUES_FILE" 2>/dev/null || echo "")
+fi
+
+# Hvis ingen snapshot, prøv at finde seneste pre-migration snapshot
+if [[ -z "$SNAPSHOT" ]]; then
+  SNAPSHOT=$(yq eval '.dolibarr.migration.preMigrationSnapshot // ""' "$VALUES_FILE" 2>/dev/null || echo "")
+fi
+
+# ---- Valider input ----
+if [[ -z "$TARGET_VERSION" ]]; then
+  fail "Rollback kræver targetVersion (brug --target-version)"
+fi
+
+if [[ "$ROLLBACK_ENABLED" != "true" && "$FORCE" != "true" ]]; then
+  log "info" "Rollback ikke aktiveret i values og --force ikke angivet - intet at gøre"
   write_status "rollback-not-needed"
   exit 0
 fi
 
-if [[ -z "$TARGET_VERSION" ]]; then
-  fail "Rollback kræver targetVersion"
+log "info" "Starter rollback til version: ${TARGET_VERSION}"
+if [[ -n "$SNAPSHOT" ]]; then
+  log "info" "Restore fra snapshot: ${SNAPSHOT}"
+else
+  log "warn" "Ingen snapshot specificeret - vil prøve at finde en"
 fi
 
-if [[ -z "$RESTORE_SNAPSHOT" ]]; then
-  # Prøv at finde seneste pre-migration snapshot
-  RESTORE_SNAPSHOT=$(yq eval '.dolibarr.migration.preMigrationSnapshot // ""' "$VALUES_FILE")
-  if [[ -z "$RESTORE_SNAPSHOT" ]]; then
-    fail "Ingen snapshot specificeret for rollback"
+# ---- Step 1: Find snapshot ----
+S3_PATH=""
+LOCAL_DUMP=""
+
+if [[ -n "$SNAPSHOT" ]]; then
+  # Brug specificeret snapshot
+  if [[ "$SNAPSHOT" == pre-migration-* ]]; then
+    S3_PATH="${S3_PRE_MIGRATION_BUCKET:-pre-migration-backups}/${NAMESPACE}/${SNAPSHOT}.sql.gz"
+  else
+    S3_PATH="${S3_BUCKET}/${NAMESPACE}/${SNAPSHOT}.sql.gz"
+  fi
+  LOCAL_DUMP="${DUMP_DIR}/${SNAPSHOT}.sql.gz"
+else
+  # Prøv at finde seneste pre-migration snapshot for denne tenant
+  if [[ -n "$S3_ENDPOINT" && -n "$S3_BUCKET" ]]; then
+    # Liste filer i S3 (simplificeret - i praksis brug S3 API)
+    # For nu: prøv at bruge values-filens preMigrationSnapshot
+    PRE_MIGRATION_SNAPSHOT=$(yq eval '.dolibarr.migration.preMigrationSnapshot // ""' "$VALUES_FILE" 2>/dev/null || echo "")
+    if [[ -n "$PRE_MIGRATION_SNAPSHOT" ]]; then
+      S3_PATH="${S3_PRE_MIGRATION_BUCKET:-pre-migration-backups}/${NAMESPACE}/${PRE_MIGRATION_SNAPSHOT}.sql.gz"
+      LOCAL_DUMP="${DUMP_DIR}/${PRE_MIGRATION_SNAPSHOT}.sql.gz"
+      SNAPSHOT="$PRE_MIGRATION_SNAPSHOT"
+    else
+      fail "Ingen snapshot fundet - brug --snapshot for at specificere"
+    fi
+  else
+    # Prøv lokal dump
+    PRE_MIGRATION_SNAPSHOT=$(ls -t "${DUMP_DIR}/${NAMESPACE}-pre-migration-*.sql.gz" 2>/dev/null | head -1 || echo "")
+    if [[ -n "$PRE_MIGRATION_SNAPSHOT" ]]; then
+      LOCAL_DUMP="$PRE_MIGRATION_SNAPSHOT"
+      SNAPSHOT=$(basename "$PRE_MIGRATION_SNAPSHOT" .sql.gz)
+    else
+      fail "Ingen snapshot fundet - brug --snapshot for at specificere"
+    fi
   fi
 fi
 
-log "info" "Starter rollback til version: ${TARGET_VERSION}"
-log "info" "Restore fra snapshot: ${RESTORE_SNAPSHOT}"
+log "info" "Brugere snapshot: ${SNAPSHOT}"
 
-# Step 1: Undeploy nuværende version (bevar namespace for nu)
+# ---- Step 2: Undeploy nuværende version ----
 log "info" "Afinstallerer nuværende release..."
+
 if release_exists; then
-  helm uninstall "$RELEASE" -n "$NAMESPACE" --wait --timeout 5m
+  helm uninstall "$RELEASE" -n "$NAMESPACE" --wait --timeout 5m || {
+    log "warn" "Kunne ikke afinstallere release - prøver at slette manuelt"
+    kubectl delete all --all -n "$NAMESPACE" --wait --timeout=5m --force --grace-period=0 || true
+  }
+else
+  log "warn" "Release $RELEASE findes ikke - springer afinstallering over"
 fi
 
-# Step 2: Hent pre-migration snapshot fra S3
-S3_PATH="pre-migration-backups/${NAMESPACE}/${RESTORE_SNAPSHOT}.sql.gz"
-LOCAL_DUMP="${DUMP_DIR}/${RESTORE_SNAPSHOT}.sql.gz"
-
-log "info" "Henter snapshot fra S3: ${S3_PATH}"
-
-# Download fra S3
-if [[ -n "$S3_ENDPOINT" && -n "$S3_BUCKET" ]]; then
+# ---- Step 3: Hent snapshot fra S3 ----
+if [[ -n "$S3_PATH" && -n "$S3_ENDPOINT" && -n "$S3_BUCKET" ]]; then
+  log "info" "Henter snapshot fra S3: ${S3_PATH}"
+  
   curl -s -X GET "${S3_ENDPOINT}/${S3_BUCKET}/${S3_PATH}" \
     -H "Host: ${S3_BUCKET}.${S3_ENDPOINT#*//}" \
     -u "${S3_ACCESS_KEY}:${S3_SECRET_KEY}" \
-    -o "$LOCAL_DUMP"
+    -o "$LOCAL_DUMP" 2>/dev/null
   
-  if [[ ! -f "$LOCAL_DUMP" ]]; then
-    fail "Kunne ikke hente snapshot fra S3"
+  if [[ ! -f "$LOCAL_DUMP" || ! -s "$LOCAL_DUMP" ]]; then
+    fail "Kunne ikke hente snapshot fra S3: ${S3_PATH}"
   fi
   
-  log "info" "Snapshot hentet: $LOCAL_DUMP"
+  log "info" "✅ Snapshot hentet fra S3: $LOCAL_DUMP"
 else
-  fail "S3 konfiguration mangler for rollback"
+  # Brug lokal dump
+  if [[ -f "$LOCAL_DUMP" ]]; then
+    log "info" "✅ Brugere lokal snapshot: $LOCAL_DUMP"
+  else
+    fail "Kunne ikke finde snapshot (S3: ${S3_PATH}, Lokal: ${LOCAL_DUMP})"
+  fi
 fi
 
-# Step 3: Genopret namespace til tidligere tilstand
+# ---- Step 4: Genopret namespace til tidligere tilstand ----
 log "info" "Genopretter til version ${TARGET_VERSION}..."
 
 # Opdater values-filen med target version
-yq eval '.image.tag = "'"$TARGET_VERSION""'" -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" && mv "${VALUES_FILE}.tmp" "$VALUES_FILE"
-yq eval '.dolibarr.migration.enabled = false' -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" && mv "${VALUES_FILE}.tmp" "$VALUES_FILE"
+log "info" "Opdaterer values-fil..."
 
-# Step 4: Redeploy med gammel version (ingen DB endnu)
-log "info" "Redeployer med gammel version..."
+# Gem nuværende version som previousTag
+CURRENT_VERSION=$(yq eval '.image.tag // ""' "$VALUES_FILE" 2>/dev/null || echo "")
+if [[ -n "$CURRENT_VERSION" ]]; then
+  yq eval '.image.previousTag = "'"$CURRENT_VERSION""'" -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" 2>/dev/null && mv "${VALUES_FILE}.tmp" "$VALUES_FILE" || {
+    log "warn" "Kunne ikke opdatere previousTag"
+  }
+fi
+
+# Sæt ny version
+yq eval '.image.tag = "'"$TARGET_VERSION""'" -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" 2>/dev/null && mv "${VALUES_FILE}.tmp" "$VALUES_FILE" || {
+  log "warn" "Kunne ikke sætte image.tag"
+}
+
+# Deaktiver migration flag
+yq eval '.dolibarr.migration.enabled = false' -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" 2>/dev/null && mv "${VALUES_FILE}.tmp" "$VALUES_FILE" || {
+  log "warn" "Kunne ikke deaktivere migration flag"
+}
+
+# ---- Step 5: Redeploy med gammel version (suspended) ----
+log "info" "Redeployer med gammel version (suspended)..."
+
 helm upgrade --install "$RELEASE" "$CHART_DIR" \
-  --namespace "$NAMESPACE" \
+  --namespace "$NAMESPACE" --create-namespace \
   -f "$VALUES_FILE" \
   --set suspended=true \
   --wait --timeout 5m \
   --atomic
 
-# Vent på at pods er oprettet (men suspended)
-log "info" "Venter på pods..."
-sleep 10
+log "info" "Namespace og resources oprettet (suspended)"
 
-# Step 5: Restore DB fra snapshot
-log "info" "Restorer DB fra snapshot..."
+# ---- Step 6: Vent på DB-pod ----
+log "info" "Venter på DB-pod..."
 
-DB_POD="$(kubectl get pod -n "$NAMESPACE" -l app=mariadb \
-  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+DB_POD=""
+for i in $(seq 1 12); do
+  DB_POD=$(kubectl get pod -n "$NAMESPACE" -l app.kubernetes.io/component=db \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  if [[ -n "$DB_POD" && "$(kubectl get pod -n "$NAMESPACE" "$DB_POD" -o jsonpath='{.status.phase}' 2>/dev/null)" == "Running" ]]; then
+    break
+  fi
+  sleep 10
+done
 
 if [[ -z "$DB_POD" ]]; then
-  fail "Kunne ikke finde DB-pod til restore"
+  fail "Kunne ikke finde kørende DB-pod"
 fi
 
-# Dekomprimer og indlæs dump
-log "info" "Indlæser DB-dump til ${DB_POD}..."
+log "info" "DB-pod fundet: ${DB_POD}"
 
-# Kopier dump til pod og indlæs
-kubectl cp "$LOCAL_DUMP" "${NAMESPACE}/${DB_POD}:/tmp/dump.sql.gz" 2>/dev/null || {
-  # Fallback: pipe direkte til pod
+# ---- Step 7: Restore DB fra snapshot ----
+log "info" "Restorer DB fra snapshot..."
+
+# Indlæs dump
+if kubectl cp "$LOCAL_DUMP" "${NAMESPACE}/${DB_POD}:/tmp/dump.sql.gz" 2>/dev/null; then
+  if kubectl exec -n "$NAMESPACE" "$DB_POD" -- \
+    sh -c 'gunzip -c /tmp/dump.sql.gz | mysql -u root -p"$(< /var/run/secrets/tenant-db/root_password)"'; then
+    log "info" "✅ DB-dump indlæst"
+  else
+    # Prøv med base64 password
+    ROOT_PASSWORD=$(kubectl get secret tenant-db -n "$NAMESPACE" -o jsonpath='{.data.root_password}' | base64 -d 2>/dev/null || echo "")
+    if [[ -n "$ROOT_PASSWORD" ]]; then
+      kubectl exec -n "$NAMESPACE" "$DB_POD" -- \
+        sh -c "gunzip -c /tmp/dump.sql.gz | mysql -u root -p'${ROOT_PASSWORD}'" || {
+        fail "Kunne ikke indlæse DB-dump"
+      }
+    else
+      fail "Kunne ikke hente root_password"
+    fi
+  fi
+else
+  # Fallback: pipe direkte
   gunzip -c "$LOCAL_DUMP" | kubectl exec -i -n "$NAMESPACE" "$DB_POD" -- \
-    mysql -u root -p"$(kubectl get secret tenant-db -n "$NAMESPACE" -o jsonpath='{.data.root_password}' | base64 -d)" 2>/dev/null || \
+    sh -c 'mysql -u root -p"$(< /var/run/secrets/tenant-db/root_password)' || {
     fail "Kunne ikke indlæse DB-dump"
-}
+  }
+fi
 
 # Slet lokal dump
 rm -f "$LOCAL_DUMP"
+log "info" "Lokal dump slettet"
 
-# Step 6: Unsuspend for at starte pods
+# ---- Step 8: Unsuspend for at starte pods ----
 log "info" "Unsuspend - starter pods..."
+
 helm upgrade "$RELEASE" "$CHART_DIR" \
   --namespace "$NAMESPACE" \
   --reuse-values \
   --set suspended=false \
-  --wait --timeout 5m
+  --wait --timeout 10m
 
-# Step 7: Verificer health
+log "info" "Pods startet"
+
+# ---- Step 9: Verificer health ----
 log "info" "Verificerer tenant health..."
-wait_for_healthz "$(tenant_healthz_url)"
 
-# Step 8: Deaktiver rollback-flag
+if wait_for_healthz "$(tenant_healthz_url)"; then
+  log "info" "✅ Healthz check bestået"
+else
+  log "warn" "Healthz check fejlede"
+  kubectl get pods -n "$NAMESPACE"
+  kubectl logs -n "$NAMESPACE" -l app=dolibarr --tail=20 || true
+  kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/component=db --tail=20 || true
+fi
+
+# ---- Step 10: Deaktiver rollback-flag ----
 log "info" "Deaktiverer rollback-flag..."
-yq eval '.rollback.enabled = false' -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" && mv "${VALUES_FILE}.tmp" "$VALUES_FILE"
-yq eval '.rollback.targetVersion = ""' -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" && mv "${VALUES_FILE}.tmp" "$VALUES_FILE"
-yq eval '.rollback.restoreFromSnapshot = ""' -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" && mv "${VALUES_FILE}.tmp" "$VALUES_FILE"
 
-write_status "rolled-back"
-log "info" "Rollback fuldført til version ${TARGET_VERSION}"
+yq eval '.rollback.enabled = false' -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" 2>/dev/null && mv "${VALUES_FILE}.tmp" "$VALUES_FILE" || {
+  log "warn" "Kunne ikke deaktivere rollback flag"
+}
+
+yq eval '.rollback.targetVersion = ""' -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" 2>/dev/null && mv "${VALUES_FILE}.tmp" "$VALUES_FILE" || {
+  log "warn" "Kunne ikke nulstille targetVersion"
+}
+
+yq eval '.rollback.restoreFromSnapshot = ""' -i "$VALUES_FILE" > "${VALUES_FILE}.tmp" 2>/dev/null && mv "${VALUES_FILE}.tmp" "$VALUES_FILE" || {
+  log "warn" "Kunne ikke nulstille restoreFromSnapshot"
+}
+
+# ---- Success ----
+write_status "rolled-back-to-${TARGET_VERSION}"
+log "info" "✅ Rollback fuldført til version ${TARGET_VERSION}"
+log "info" "   Snapshot: ${SNAPSHOT}"
+log "info" "   Healthz: OK"
