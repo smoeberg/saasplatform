@@ -4,6 +4,11 @@
 
 Denne guide beskriver hvordan man opsætter saasplatform i produktion. Guiden følger strukturen fra [Arkitektur.md](../Arkitektur.md) og dækker alle komponenter nødvendige for fase 2.
 
+**Se også:**
+- [Fase 2 README](README.md) - Komplet oversigt over fase 2
+- [Fase 2 Installationstjekliste](Installationstjekliste.md) - Detaljeret checklist
+- [Fase 2 Testplan](Testplan.md) - Test procedure for fase 2
+
 ## Forudsætninger
 
 ### Hardware krav
@@ -320,9 +325,12 @@ export CANARY_PERCENTAGE=10  # 10% af 10 = 1 tenant
 ### 8.3 Dokumentation
 
 - [Arkitektur.md](../Arkitektur.md) - System arkitektur
-- [Fase 1a Installationstjekliste.md](../Fase%201a%20Installationstjekliste.md) - Fase 1a
-- [Fase 1c Testplan.md](../Fase2/Fase%201c%20Testplan.md) - Fase 1c tests
+- [Fase 1a Installationstjekliste.md](../Fase1a/Installationstjekliste.md) - Fase 1a
+- [Fase 1b Installationstjekliste.md](../Fase1b/Installationstjekliste.md) - Fase 1b
+- [Fase 1c Testplan.md](../Fase1c/Testplan.md) - Fase 1c tests
 - [Fase 2 README.md](README.md) - Fase 2 oversigt
+- [Fase 2 Installationstjekliste.md](Installationstjekliste.md) - Fase 2 checklist
+- [Fase 2 Testplan.md](Testplan.md) - Fase 2 tests
 
 ## Drift
 
