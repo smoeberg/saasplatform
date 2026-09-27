@@ -67,7 +67,7 @@ spec:
             exec:
               command:
                 - mysql
-                - -u{{ .Values.dolibarr.db.user | default "dolibarr" }}
+                - -u{{ .Values.db.user | default "dolibarr" }}
                 - -p${MARIADB_PASSWORD}
                 - -e
                 - "SELECT 1"
