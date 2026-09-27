@@ -127,3 +127,21 @@ suspendedPage:
   enabled: true
   image: nginx:alpine
   port: 8080
+
+# Autoscaling (udskudt i fase 1 -- ReplicaCount er låst til 1 pga. ReadWriteOnce PVC)
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  targetCPUUtilizationPercentage: 80
+
+# S3/Wasabi-cred (egentlige hemmeligheder injiceres af SellYourSaaS-agenten som SealedSecret-env;
+# disse felter er kun endpoint-adresse og fallback-cards, Arkitektur rev. 6 §3.6)
+s3:
+  endpoint: ""
+  accessKey: ""
+  secretKey: ""
+
+# DB-bruger (oprettes af init; password kommer fra SealedSecret/Secret)
+db:
+  user: dolibarr
