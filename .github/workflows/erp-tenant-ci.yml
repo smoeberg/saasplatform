@@ -167,11 +167,9 @@ jobs:
 
       - name: Setup MinIO (S3 mock)
         run: |
-          docker run -d -p 9000:9000 -p 9001:9001 \
-            -e MINIO_ROOT_USER=minioadmin \
-            -e MINIO_ROOT_PASSWORD=minioadmin \
-            --name minio \
-            docker.io/minio/minio server /data --console-address ":9001"
+          # MinIO er ikke laengere offentligt tilgaengeligt (docker.io + quay.io kraever
+          # login siden 2025) -- CI bruger adobe/s3mock som S3-API-mock i stedet.
+          docker run -d -p 9000:9191 --name s3mock adobe/s3mock
           sleep 10
           
 
