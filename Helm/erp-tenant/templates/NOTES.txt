@@ -1,0 +1,55 @@
+saasplatform - Dolibarr ERP Tenant
+====================================
+
+Tenant: {{ .Values.instance }}
+Domain: {{ .Values.domain }}
+Namespace: {{ .Release.Namespace }}
+Version: {{ .Values.image.tag }}
+
+DEPLOYMENT STATUS
+-----------------
+✓ Dolibarr Deployment: {{ if .Values.suspended }}Suspended (0 replicas){{ else }}Running (1 replica){{ end }}
+✓ MariaDB StatefulSet: {{ if .Values.suspended }}Suspended (0 replicas){{ else }}Running (1 replica){{ end }}
+✓ Ingress: {{ .Values.domain }} (TLS: {{ .Values.ingress.tls }})
+✓ ResourceQuota: Applied
+✓ NetworkPolicy: Default deny + selective egress
+✓ PVC: documents (5Gi), mariadb-data ({{ .Values.db.storage }})
+
+{{- if .Values.suspended }}
+SUSPENSION STATUS
+-----------------
+✓ Tenant is SUSPENDED
+✓ All workloads scaled to 0
+✓ CronJobs removed
+✓ Suspended page active at {{ .Values.domain }}
+
+{{- else }}
+BACKUP STATUS
+-------------
+✓ Backup CronJob: {{ .Values.backup.schedule }} (S3: {{ .Values.backup.s3Enabled }})
+{{- if .Values.dolibarr.migration.enabled }}
+✓ Pre-migration snapshot: Enabled
+{{- end }}
+
+HEALTH CHECK
+-----------
+Healthz endpoint: https://{{ .Values.domain }}/healthz
+
+NEXT STEPS
+----------
+1. Verify deployment:
+   kubectl get all -n {{ .Release.Namespace }}
+
+2. Check logs:
+   kubectl logs -l app=dolibarr -n {{ .Release.Namespace }}
+
+3. Test healthz:
+   curl -fsS https://{{ .Values.domain }}/healthz
+
+4. Access Dolibarr:
+   https://{{ .Values.domain }}
+
+{{- if .Values.suspended }}
+5. To unsuspend:
+   helm upgrade {{ .Release.Name }} . --namespace {{ .Release.Namespace }} --set suspended=false
+{{- end }}

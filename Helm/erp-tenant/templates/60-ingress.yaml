@@ -1,0 +1,161 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dolibarr-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dolibarr
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+  annotations:
+    {{- if .Values.ingress.tls }}
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    {{- end }}
+    {{- if .Values.suspended }}
+    saasplatform.io/suspended: "true"
+    {{- end }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-tenant-middleware@kubernetescrd
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- if .Values.ingress.tls }}
+tls:
+    - hosts:
+        - {{ .Values.domain | quote }}
+      secretName: tenant-tls-{{ .Values.instance }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.domain | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                {{- if .Values.suspended }}
+                name: suspended-page
+                port:
+                  number: 80
+                {{- else }}
+                name: dolibarr
+                port:
+                  number: 80
+                {{- end }}
+
+---
+{{- /* Suspended page resources - only created when suspended */ -}}
+{{- if .Values.suspended }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: suspended-html
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: suspended-page
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+  annotations:
+    saasplatform.io/suspended: "true"
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="da">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Instans Suspenderet</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          text-align: center;
+          padding: 100px;
+          background-color: #f5f5f5;
+        }
+        h1 {
+          color: #d9534f;
+          font-size: 2.5em;
+        }
+        p {
+          font-size: 1.2em;
+          color: #666;
+        }
+        .support {
+          margin-top: 50px;
+          font-size: 1.1em;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>⚠️ Instans Suspenderet</h1>
+      <p>Din SaaS-instans er midlertidig suspenderet.</p>
+      <p>Kontakt venligst support for at genaktivere din instans.</p>
+      <div class="support">
+        <p>Support: support@saasplatform.dev</p>
+      </div>
+    </body>
+    </html>
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: suspended-page
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: suspended-page
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: suspended-page
+      tenant: {{ .Values.instance | quote }}
+  template:
+    metadata:
+      labels:
+        app: suspended-page
+        tenant: {{ .Values.instance | quote }}
+        app.kubernetes.io/managed-by: saasplatform
+    spec:
+      containers:
+        - name: suspended-page
+          image: {{ .Values.suspendedPage.image | quote }}
+          ports:
+            - containerPort: {{ .Values.suspendedPage.port }}
+              name: http
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+      volumes:
+        - name: html
+          configMap:
+            name: suspended-html
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: suspended-page
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: suspended-page
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+spec:
+  selector:
+    app: suspended-page
+    tenant: {{ .Values.instance | quote }}
+  ports:
+    - port: 80
+      targetPort: {{ .Values.suspendedPage.port }}
+      name: http
+{{- end -}}

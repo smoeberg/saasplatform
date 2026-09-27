@@ -1,0 +1,112 @@
+{{- if .Values.db.enabled -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mariadb
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+    app.kubernetes.io/component: db
+spec:
+  serviceName: mariadb
+  replicas: {{ if .Values.suspended }}0{{ else }}1{{ end }}
+  selector:
+    matchLabels:
+      app: mariadb
+      app.kubernetes.io/component: db
+      tenant: {{ .Values.instance | quote }}
+  template:
+    metadata:
+      labels:
+        app: mariadb
+        app.kubernetes.io/component: db
+        tenant: {{ .Values.instance | quote }}
+        app.kubernetes.io/managed-by: saasplatform
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:11.4
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MARIADB_DATABASE
+              value: dolibarr
+            - name: MARIADB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: tenant-db
+                  key: username
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tenant-db
+                  key: password
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tenant-db
+                  key: root_password
+          ports:
+            - containerPort: 3306
+              name: mysql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+          resources:
+            {{- toYaml .Values.db.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command:
+                - mysql
+                - -u{{ .Values.dolibarr.db.user | default "dolibarr" }}
+                - -p${MARIADB_PASSWORD}
+                - -e
+                - "SELECT 1"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - mysqladmin
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: mariadb
+          tenant: {{ .Values.instance | quote }}
+          app.kubernetes.io/managed-by: saasplatform
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.db.storage | quote }}
+{{- if .Values.db.storageClass -}}
+        storageClassName: {{ .Values.db.storageClass | quote }}
+{{- end -}}
+{{- end -}}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mariadb
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+    app.kubernetes.io/component: db
+spec:
+  selector:
+    app: mariadb
+    app.kubernetes.io/component: db
+    tenant: {{ .Values.instance | quote }}
+  ports:
+    - port: 3306
+      targetPort: 3306
+      name: mysql

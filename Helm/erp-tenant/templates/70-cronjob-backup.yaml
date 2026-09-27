@@ -1,0 +1,204 @@
+{{- /* Backup CronJob - only when not suspended */ -}}
+{{- if and .Values.backup.enabled (not .Values.suspended) -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dolibarr
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+    saasplatform.io/cronjob-type: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit | default 1 }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: dolibarr
+            tenant: {{ .Values.instance | quote }}
+            saasplatform.io/cronjob-type: backup
+          annotations:
+            saasplatform.io/backup-schedule: {{ .Values.backup.schedule | quote }}
+        spec:
+          containers:
+            - name: backup
+              image: appropriate/curl:latest
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  # Create backup directory
+                  mkdir -p /backup
+                  
+                  # Database dump with single transaction for consistency
+                  mysqldump -h mariadb.{{ .Release.Namespace }}.svc.cluster.local \
+                    -u $(DB_USER) \
+                    -p"$(DB_PASSWORD)" \
+                    --single-transaction \
+                    --quick \
+                    --skip-add-drop-table \
+                    dolibarr > /backup/backup-$(date +%Y%m%d%H%M%S).sql
+                  
+                  # Compress
+                  gzip /backup/backup-$(date +%Y%m%d%H%M%S).sql
+                  
+                  # Generate filename
+                  BACKUP_FILE=$(ls /backup/backup-*.sql.gz)
+                  TIMESTAMP=$(date +%Y%m%d%H%M%S)
+                  
+                  # Upload to S3 if enabled
+                  {{- if .Values.backup.s3Enabled }}
+                  if [ -n "$S3_ENDPOINT" ] && [ -n "$S3_BUCKET" ]; then
+                    curl -s -X PUT \
+                      -T "$BACKUP_FILE" \
+                      "${S3_ENDPOINT}/${S3_BUCKET}/{{ .Values.instance }}/backup-${TIMESTAMP}.sql.gz" \
+                      -H "Host: {{ .Values.backup.bucket }}.${S3_ENDPOINT#*//}" \
+                      -u "${S3_ACCESS_KEY}:${S3_SECRET_KEY}" || true
+                  fi
+                  {{- end }}
+                  
+                  # Cleanup old backups (retention)
+                  find /backup -name "backup-*.sql.gz" -mtime +{{ .Values.backup.retentionDays }} -delete 2>/dev/null || true
+                  
+                  echo "Backup completed: $BACKUP_FILE"
+              env:
+                - name: DB_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: tenant-db
+                      key: username
+                - name: DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: tenant-db
+                      key: password
+                - name: S3_ENDPOINT
+                  value: {{ .Values.s3.endpoint | default "" | quote }}
+                - name: S3_BUCKET
+                  value: {{ .Values.backup.bucket | default "" | quote }}
+                - name: S3_ACCESS_KEY
+                  value: {{ .Values.s3.accessKey | default "" | quote }}
+                - name: S3_SECRET_KEY
+                  value: {{ .Values.s3.secretKey | default "" | quote }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+          restartPolicy: OnFailure
+          volumes:
+            - name: backup
+              emptyDir:
+                sizeLimit: 1Gi
+{{- end -}}
+
+---
+{{- /* Pre-migration snapshot CronJob - only when migration is enabled and not suspended */ -}}
+{{- if and .Values.dolibarr.migration.enabled (not .Values.suspended) -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pre-migration-snapshot
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dolibarr
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+    saasplatform.io/cronjob-type: pre-migration
+  annotations:
+    saasplatform.io/migration-from: {{ .Values.image.previousTag | quote }}
+    saasplatform.io/migration-to: {{ .Values.image.tag | quote }}
+spec:
+  schedule: "{{ .Values.backup.preMigration.schedule | default "0 2 * * *" }}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: dolibarr
+            tenant: {{ .Values.instance | quote }}
+            saasplatform.io/cronjob-type: pre-migration
+        spec:
+          containers:
+            - name: pre-migration
+              image: appropriate/curl:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  # Create backup directory
+                  mkdir -p /backup
+                  
+                  # Take consistent snapshot
+                  mysqldump -h mariadb.{{ .Release.Namespace }}.svc.cluster.local \
+                    -u $(DB_USER) \
+                    -p"$(DB_PASSWORD)" \
+                    --single-transaction \
+                    --quick \
+                    --skip-add-drop-table \
+                    --routines \
+                    --triggers \
+                    --events \
+                    dolibarr > /backup/pre-migration-{{ .Values.image.tag }}-$(date +%Y%m%d%H%M%S).sql
+                  
+                  gzip /backup/pre-migration-{{ .Values.image.tag }}-*.sql
+                  
+                  # Upload to S3
+                  {{- if .Values.backup.preMigration.s3Enabled }}
+                  BACKUP_FILE=$(ls /backup/pre-migration-*.sql.gz)
+                  curl -s -X PUT \
+                    -T "$BACKUP_FILE" \
+                    "${S3_ENDPOINT}/{{ .Values.backup.preMigration.bucket }}/{{ .Values.instance }}/$(basename $BACKUP_FILE)" \
+                    -H "Host: {{ .Values.backup.preMigration.bucket }}.${S3_ENDPOINT#*//}" \
+                    -u "${S3_ACCESS_KEY}:${S3_SECRET_KEY}" || true
+                  {{- end }}
+                  
+                  echo "Pre-migration snapshot completed"
+              env:
+                - name: DB_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: tenant-db
+                      key: username
+                - name: DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: tenant-db
+                      key: password
+                - name: S3_ENDPOINT
+                  value: {{ .Values.s3.endpoint | default "" | quote }}
+                - name: S3_ACCESS_KEY
+                  value: {{ .Values.s3.accessKey | default "" | quote }}
+                - name: S3_SECRET_KEY
+                  value: {{ .Values.s3.secretKey | default "" | quote }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+          restartPolicy: OnFailure
+          volumes:
+            - name: backup
+              emptyDir:
+                sizeLimit: 1Gi
+{{- end -}}

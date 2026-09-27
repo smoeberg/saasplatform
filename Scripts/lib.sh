@@ -13,7 +13,7 @@ set -euo pipefail
 
 # ---- Konfiguration (overstyres via miljøvariabler på K8s-runneren, §3.7) ----
 KUBECONFIG="${KUBECONFIG:-/etc/saasplatform/kubeconfig}"
-CHART_DIR="${CHART_DIR:-/opt/saasplatform/Helm}"
+CHART_DIR="${CHART_DIR:-/opt/saasplatform/Helm/erp-tenant}"
 VALUES_DIR="${VALUES_DIR:-/etc/saasplatform/values}"
 STATUS_DIR="${STATUS_DIR:-/var/lib/saasplatform/status}"
 TENANT_DOMAIN="${TENANT_DOMAIN:-tenants.example.com}"   # ANTAGELSE: ret til jeres faktiske DNS-skema

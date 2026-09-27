@@ -1,32 +1,55 @@
-# Default: standard-plan
+# Default values for erp-tenant
+# This is the default configuration for a standard tenant
+
+# Tenant identification
 instance: ""
 domain: ""
+
+# Suspension state
 suspended: false
+
+# Dolibarr image
 image:
   repository: ghcr.io/smoeberg/dolibarr
   tag: "23.0.1"
-  # For rollback: tidligere version til gendannelse
+  # For rollback: previous version to restore
   previousTag: ""
+
+# Dolibarr configuration
 dolibarr:
   resources:
-    requests: {cpu: 100m, memory: 256Mi}
-    limits: {cpu: "2", memory: 1Gi}
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
   # Migration settings
   migration:
     enabled: false
-    # Pre-migration snapshot tag (genereres automatisk)
+    # Pre-migration snapshot tag (auto-generated)
     preMigrationSnapshot: ""
+
+# MariaDB database
 db:
   enabled: true
   storage: 5Gi
   storageClass: ""
   resources:
-    requests: {cpu: 100m, memory: 512Mi}
-    limits: {cpu: "1", memory: 1Gi}
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# Ingress configuration
 ingress:
   enabled: true
   className: traefik
   tls: true
+
+# Backup configuration
 backup:
   enabled: true
   # retentionDays: 7 (standard) / 30 (premium)
@@ -34,20 +57,24 @@ backup:
   schedule: "0 3 * * *"
   s3Enabled: false
   bucket: ""
-  # Pre-migration snapshots gemmes separat
+  # Pre-migration snapshots stored separately
   preMigration:
     enabled: true
     s3Enabled: true
     bucket: "pre-migration-backups"
+
+# Resource quota per tenant
 quota:
   requestsCpu: "1"
   requestsMemory: 2Gi
   limitsCpu: "2"
   limitsMemory: 4Gi
   pvc: "3"
+
+# NetworkPolicy configuration
 networkPolicy:
   defaultDeny: true
-  # egress tilladelser (mail, DNS, opdateringer)
+  # egress allowances (mail, DNS, updates)
   egressMail: true
 
 # Rollback settings
@@ -55,3 +82,9 @@ rollback:
   enabled: false
   targetVersion: ""
   restoreFromSnapshot: ""
+
+# Suspended page configuration
+suspendedPage:
+  enabled: true
+  image: nginx:alpine
+  port: 8080

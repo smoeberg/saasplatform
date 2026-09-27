@@ -9,12 +9,16 @@ if ! release_exists; then
   fail "Kan ikke genoptage: release $RELEASE findes ikke"
 fi
 
-log "info" "Genoptager $RELEASE (sætter suspended=false)"
+log "info" "Genoptager $RELEASE (sætter suspended=false, genskaber CronJobs via Helm)"
+
 helm upgrade "$RELEASE" "$CHART_DIR" \
   --namespace "$NAMESPACE" \
   --reuse-values \
   --set suspended=false \
   --wait --timeout 5m
+
+# Helm vil genskabe CronJobs fra chartet (deklarativt)
+log "info" "CronJobs genskabt via Helm upgrade"
 
 wait_for_healthz "$(tenant_healthz_url)"
 

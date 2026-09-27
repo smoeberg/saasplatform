@@ -1,0 +1,22 @@
+{{- /* Rollback configuration - only when rollback is enabled */ -}}
+{{- if .Values.rollback.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rollback-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dolibarr
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+    saasplatform.io/rollback: "true"
+data:
+  targetVersion: {{ .Values.rollback.targetVersion | quote }}
+  restoreFromSnapshot: {{ .Values.rollback.restoreFromSnapshot | quote }}
+  rollbackTimestamp: {{ now | date "20060102-150405" | quote }}
+  notes: |
+    Rollback initiated for tenant {{ .Values.instance }}
+    From: {{ .Values.image.tag }}
+    To: {{ .Values.rollback.targetVersion }}
+    Restore from snapshot: {{ .Values.rollback.restoreFromSnapshot }}
+{{- end -}}

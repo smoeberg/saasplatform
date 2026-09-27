@@ -1,0 +1,20 @@
+apiVersion: v2
+name: erp-tenant
+description: Per-tenant Dolibarr ERP with MariaDB, Ingress, TLS, NetworkPolicy, ResourceQuota, and lifecycle management
+version: 0.2.0
+appVersion: "23.0.1"
+home: https://github.com/smoeberg/saasplatform
+type: application
+keywords:
+  - dolibarr
+  - saas
+  - multi-tenant
+  - mariadb
+  - kubernetes
+maintainers:
+  - name: saasplatform
+    email: support@saasplatform.dev
+sources:
+  - https://github.com/smoeberg/saasplatform
+  - https://github.com/DoliCloud/sellyoursaas
+dependencies: []

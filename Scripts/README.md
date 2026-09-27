@@ -27,8 +27,12 @@ sourcer `lib.sh` som første linje og deler navnekonvention, logging og fejlhån
 4. **DB-pod-label**: `beforeundeploy.sh` forventer at DB-pod'en er labelet
    `app.kubernetes.io/component=db` — skal matche det, Helm-charten faktisk sætter.
 5. **Helm-charten skal understøtte `.Values.suspended`** (bool). Når `true`: replicas=0,
-   ingen CronJobs, Ingress peger på en "suspended"-side. Dette er endnu ikke bygget —
-   det er den næste opgave (`Helm/erp-tenant`).
+   ingen CronJobs, Ingress peger på en "suspended"-side. ✅ **Implementeret i `Helm/erp-tenant`**
+   - `templates/60-ingress.yaml`: Suspended page med nginx
+   - `templates/30-mariadb-statefulset.yaml`: replicas=0 når suspended
+   - `templates/40-dolibarr-deployment.yaml`: replicas=0 når suspended
+   - `templates/70-cronjob-backup.yaml`: CronJobs kun oprettet når NOT suspended
+   - `Scripts/suspend.sh`: Sletter CronJobs ved suspension (ifølge arkitektur §3.3)
 
 ## Miljøvariabler (kan sættes i systemd-unit eller SellYourSaaS' agent-miljø)
 

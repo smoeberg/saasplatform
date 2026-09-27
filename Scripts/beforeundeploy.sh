@@ -12,8 +12,8 @@ fi
 
 DUMP_FILE="${DUMP_DIR}/${NAMESPACE}-$(date +%Y%m%d%H%M%S).sql.gz"
 
-# Find DB-pod (MariaDB)
-DB_POD="$(kubectl get pod -n "$NAMESPACE" -l app=mariadb \
+# Find DB-pod (MariaDB) - bruger det nye label fra erp-tenant chartet
+DB_POD="$(kubectl get pod -n "$NAMESPACE" -l app.kubernetes.io/component=db \
   -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 
 if [[ -z "$DB_POD" ]]; then

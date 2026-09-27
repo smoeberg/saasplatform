@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dolibarr
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dolibarr
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+    app.kubernetes.io/version: {{ .Values.image.tag | quote }}
+    {{- if .Values.rollback.enabled }}
+    saasplatform.io/rollback: "true"
+    saasplatform.io/rollback-target: {{ .Values.rollback.targetVersion | quote }}
+    {{- end }}
+    {{- if .Values.dolibarr.migration.enabled }}
+    saasplatform.io/migration: "true"
+    saasplatform.io/migration-from: {{ .Values.image.previousTag | quote }}
+    saasplatform.io/migration-to: {{ .Values.image.tag | quote }}
+    {{- end }}
+spec:
+  replicas: {{ if .Values.suspended }}0{{ else }}1{{ end }}
+  selector:
+    matchLabels:
+      app: dolibarr
+      tenant: {{ .Values.instance | quote }}
+  template:
+    metadata:
+      labels:
+        app: dolibarr
+        tenant: {{ .Values.instance | quote }}
+        app.kubernetes.io/managed-by: saasplatform
+        app.kubernetes.io/version: {{ .Values.image.tag | quote }}
+        {{- if .Values.rollback.enabled }}
+        saasplatform.io/rollback: "true"
+        {{- end }}
+        {{- if .Values.dolibarr.migration.enabled }}
+        saasplatform.io/migration: "true"
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "45-dolibarr-configmap.yaml") . | sha256sum | trunc 63 }}
+    spec:
+      containers:
+        - name: dolibarr
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          env:
+            - name: DOLI_DB_HOST
+              value: "mariadb.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: DOLI_DB_NAME
+              value: dolibarr
+            - name: DOLI_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: tenant-db
+                  key: username
+            - name: DOLI_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tenant-db
+                  key: password
+            - name: DOLI_URL_ROOT
+              value: "https://{{ .Values.domain }}"
+            - name: PHP_MEMORY_LIMIT
+              value: "512M"
+            - name: PHP_MAX_EXECUTION_TIME
+              value: "300"
+            - name: PHP_MAX_INPUT_VARS
+              value: "5000"
+            {{- if .Values.dolibarr.migration.enabled }}
+            - name: DOLI_MIGRATION_MODE
+              value: "true"
+            - name: DOLI_MIGRATION_FROM_VERSION
+              value: {{ .Values.image.previousTag | quote }}
+            - name: DOLI_MIGRATION_TO_VERSION
+              value: {{ .Values.image.tag | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+              scheme: HTTP
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.dolibarr.resources | nindent 12 }}
+          volumeMounts:
+            - name: documents
+              mountPath: /var/www/dolibarr/documents
+            - name: config
+              mountPath: /var/www/dolibarr/conf/conf.php
+              subPath: conf.php
+              readOnly: true
+      volumes:
+        - name: documents
+          persistentVolumeClaim:
+            claimName: documents
+        - name: config
+          configMap:
+            name: dolibarr-config
+            items:
+              - key: conf.php
+                path: conf.php

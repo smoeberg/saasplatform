@@ -1,0 +1,117 @@
+{{- if .Values.networkPolicy.defaultDeny -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dolibarr
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+{{- end -}}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dolibarr-traffic
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dolibarr
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+spec:
+  podSelector:
+    matchLabels:
+      app: dolibarr
+      tenant: {{ .Values.instance | quote }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              name: traefik
+      ports:
+        - port: 80
+          protocol: TCP
+  egress:
+    # Allow DB access
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mariadb
+              app.kubernetes.io/component: db
+      ports:
+        - port: 3306
+          protocol: TCP
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+{{- if .Values.networkPolicy.egressMail -}}
+    # Allow mail (SMTP)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 587
+          protocol: TCP
+        - port: 465
+          protocol: TCP
+{{- end -}}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-mariadb-traffic
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mariadb
+    tenant: {{ .Values.instance | quote }}
+    app.kubernetes.io/managed-by: saasplatform
+    app.kubernetes.io/component: db
+spec:
+  podSelector:
+    matchLabels:
+      app: mariadb
+      app.kubernetes.io/component: db
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: dolibarr
+              tenant: {{ .Values.instance | quote }}
+      ports:
+        - port: 3306
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
