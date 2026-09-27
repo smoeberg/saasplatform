@@ -30,6 +30,7 @@ BACKUP STATUS
 {{- if .Values.dolibarr.migration.enabled }}
 ✓ Pre-migration snapshot: Enabled
 {{- end }}
+{{- end }}
 
 HEALTH CHECK
 -----------
