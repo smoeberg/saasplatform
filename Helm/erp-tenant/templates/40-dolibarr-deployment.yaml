@@ -37,7 +37,7 @@ spec:
         saasplatform.io/migration: "true"
         {{- end }}
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "45-dolibarr-configmap.yaml") . | sha256sum | trunc 63 }}
+        checksum/config: {{ include (print $.Template.BasePath "/45-dolibarr-configmap.yaml") . | sha256sum | trunc 63 }}
     spec:
       {{- if .Values.imagePullSecrets.enabled }}
       imagePullSecrets:
