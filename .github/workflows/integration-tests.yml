@@ -23,8 +23,8 @@ jobs:
       - name: Setup k3d
         uses: nolar/setup-k3d-k3s@v1
         with:
-          cluster-name: saas-integration-test
-          k3s-args: "--disable traefik"
+          k3d-name: saas-integration-test
+          k3s-args: "--disable=traefik"
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
@@ -94,8 +94,8 @@ jobs:
       - name: Setup k3d
         uses: nolar/setup-k3d-k3s@v1
         with:
-          cluster-name: saas-canary-test
-          k3s-args: "--disable traefik"
+          k3d-name: saas-canary-test
+          k3s-args: "--disable=traefik"
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
@@ -180,7 +180,7 @@ jobs:
       - name: Setup k3d
         uses: nolar/setup-k3d-k3s@v1
         with:
-          cluster-name: saas-backup-test
+          k3d-name: saas-backup-test
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
