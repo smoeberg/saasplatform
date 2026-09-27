@@ -81,6 +81,8 @@ db:
   podSecurityContext:
     fsGroup: 1001
     fsGroupChangePolicy: OnRootMismatch
+  # DB-bruger (oprettes af init; password kommer fra Secret/SealedSecret)
+  user: dolibarr
 
 # Ingress configuration
 ingress:
@@ -141,7 +143,3 @@ s3:
   endpoint: ""
   accessKey: ""
   secretKey: ""
-
-# DB-bruger (oprettes af init; password kommer fra SealedSecret/Secret)
-db:
-  user: dolibarr
