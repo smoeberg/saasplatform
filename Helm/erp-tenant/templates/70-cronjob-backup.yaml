@@ -94,9 +94,17 @@ spec:
                 - name: S3_BUCKET
                   value: {{ .Values.backup.bucket | default "" | quote }}
                 - name: S3_ACCESS_KEY
-                  value: {{ .Values.s3.accessKey | default "" | quote }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: tenant-s3
+                      key: accessKey
+                      optional: true
                 - name: S3_SECRET_KEY
-                  value: {{ .Values.s3.secretKey | default "" | quote }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: tenant-s3
+                      key: secretKey
+                      optional: true
               volumeMounts:
                 - name: backup
                   mountPath: /backup
@@ -204,9 +212,17 @@ spec:
                 - name: S3_ENDPOINT
                   value: {{ .Values.s3.endpoint | default "" | quote }}
                 - name: S3_ACCESS_KEY
-                  value: {{ .Values.s3.accessKey | default "" | quote }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: tenant-s3
+                      key: accessKey
+                      optional: true
                 - name: S3_SECRET_KEY
-                  value: {{ .Values.s3.secretKey | default "" | quote }}
+                  valueFrom:
+                    secretKeyRef:
+                      name: tenant-s3
+                      key: secretKey
+                      optional: true
               volumeMounts:
                 - name: backup
                   mountPath: /backup
