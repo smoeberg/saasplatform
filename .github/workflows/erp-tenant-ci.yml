@@ -169,7 +169,7 @@ jobs:
         run: |
           # MinIO er ikke laengere offentligt tilgaengeligt (docker.io + quay.io kraever
           # login siden 2025) -- CI bruger adobe/s3mock som S3-API-mock i stedet.
-          docker run -d -p 9000:9191 --name s3mock adobe/s3mock
+          docker run -d -p 9000:9090 --name s3mock adobe/s3mock
           sleep 10
           
 
