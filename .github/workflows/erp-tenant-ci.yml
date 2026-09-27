@@ -171,14 +171,9 @@ jobs:
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
             --name minio \
-            quay.io/minio/minio server /data --console-address ":9001"
+            docker.io/minio/minio server /data --console-address ":9001"
           sleep 10
           
-          # Opret buckets
-          curl -X PUT http://localhost:9000/minioadmin/saasplatform-backups \
-            -H "Host: localhost:9000" || true
-          curl -X PUT http://localhost:9000/minioadmin/pre-migration-backups \
-            -H "Host: localhost:9000" || true
 
       - name: Create test values
         run: |
