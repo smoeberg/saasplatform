@@ -34,7 +34,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl jq yq
 
-      - name: Setup MinIO (S3 mock)
+      - name: Setup S3 mock (adobe/s3mock)
         run: |
           # MinIO er ikke laengere offentligt tilgaengeligt (docker.io + quay.io kraever
           # login siden 2025) -- CI bruger adobe/s3mock som S3-API-mock i stedet.
@@ -102,7 +102,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl jq yq
 
-      - name: Setup MinIO
+      - name: Setup S3 mock (adobe/s3mock)
         run: |
           # MinIO er ikke laengere offentligt tilgaengeligt (docker.io + quay.io kraever
           # login siden 2025) -- CI bruger adobe/s3mock som S3-API-mock i stedet.
@@ -201,7 +201,7 @@ jobs:
             --namespace velero \
             --wait || true
 
-      - name: Setup MinIO
+      - name: Setup S3 mock (adobe/s3mock)
         run: |
           # MinIO er ikke laengere offentligt tilgaengeligt (docker.io + quay.io kraever
           # login siden 2025) -- CI bruger adobe/s3mock som S3-API-mock i stedet.
