@@ -93,10 +93,10 @@ spec:
         resources:
           requests:
             storage: {{ .Values.db.storage | quote }}
-{{- if .Values.db.storageClass -}}
+{{- if .Values.db.storageClass }}
         storageClassName: {{ .Values.db.storageClass | quote }}
-{{- end -}}
-{{- end -}}
+{{- end }}
+{{- end }}
 
 ---
 apiVersion: v1
