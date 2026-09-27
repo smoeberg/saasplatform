@@ -136,7 +136,7 @@ jobs:
         uses: nolar/setup-k3d-k3s@v1
         with:
           k3d-name: erp-tenant-test
-          k3s-args: "--disable=traefik"
+          k3s-args: "--k3s-server-arg --disable=traefik"
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
