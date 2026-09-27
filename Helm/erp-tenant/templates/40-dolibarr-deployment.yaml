@@ -43,12 +43,8 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.imagePullSecrets.name | quote }}
       {{- end }}
-      {{- if .Values.imagePullSecrets.enabled }}
-      imagePullSecrets:
-        - name: {{ .Values.imagePullSecrets.name | quote }}
-      {{- end }}
       securityContext:
-        {{- toYaml .Values.dolibarr.securityContext | nindent 8 }}
+        {{- toYaml .Values.dolibarr.podSecurityContext | nindent 8 }}
       containers:
         - name: dolibarr
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -116,6 +112,14 @@ spec:
               mountPath: /var/www/dolibarr/conf/conf.php
               subPath: conf.php
               readOnly: true
+            # FIX: readOnlyRootFilesystem: true betyder ALT uden for eksplicitte
+            # mounts er read-only. PHP/Dolibarr skriver typisk sessions og temp-filer
+            # til /tmp -- uden dette crasher containeren ved foerste skriveforsoeg.
+            # AABENT PUNKT: der kan vaere flere skrivbare stier (fx en cache-mappe)
+            # afhaengigt af det faktiske image, som endnu ikke er valgt -- verificer
+            # mod imagets dokumentation naar det findes.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: documents
           persistentVolumeClaim:
@@ -126,3 +130,5 @@ spec:
             items:
               - key: conf.php
                 path: conf.php
+        - name: tmp
+          emptyDir: {}
