@@ -20,7 +20,7 @@ metadata:
 spec:
   ingressClassName: {{ .Values.ingress.className | quote }}
   {{- if .Values.ingress.tls }}
-tls:
+  tls:
     - hosts:
         - {{ .Values.domain | quote }}
       secretName: tenant-tls-{{ .Values.instance }}
