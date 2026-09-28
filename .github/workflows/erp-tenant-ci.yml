@@ -221,7 +221,7 @@ EOF
           export SELLYOURSAAS_VERSION="23.0.1"
           
           # Kør deploy.sh
-          ./Scripts/deploy.sh "test-123" || exit 1
+          bash ./Scripts/deploy.sh "test-123" || exit 1
           
           # Vent på pods
           sleep 15
@@ -255,7 +255,7 @@ EOF
           TENANT_DOMAIN: tenants.example.com
         run: |
           # Suspend tenant
-          ./Scripts/suspend.sh "test-123" || exit 1
+          bash ./Scripts/suspend.sh "test-123" || exit 1
           
           sleep 5
           
@@ -281,7 +281,7 @@ EOF
           TENANT_DOMAIN: tenants.example.com
         run: |
           # Unsuspend tenant
-          ./Scripts/unsuspend.sh "test-123" || exit 1
+          bash ./Scripts/unsuspend.sh "test-123" || exit 1
           
           sleep 10
           
@@ -306,7 +306,7 @@ EOF
           STATUS_DIR: /tmp/saasplatform-status
         run: |
           # Undeploy tenant
-          ./Scripts/undeploy.sh "test-123" || true
+          bash ./Scripts/undeploy.sh "test-123" || true
           
           sleep 5
           
@@ -355,12 +355,12 @@ EOF
           export SELLYOURSAAS_DOLIBARRINSTANCE_URL="https://migration-test.tenants.example.com"
           export SELLYOURSAAS_VERSION="23.0.1"
           
-          ./Scripts/deploy.sh "migration-test" || exit 1
+          bash ./Scripts/deploy.sh "migration-test" || exit 1
           
           sleep 10
           
           # Simuler migrering til 23.0.2
           export SELLYOURSAAS_VERSION="23.0.2"
-          ./Scripts/migrate.sh "migration-test" || echo "⚠️  Migration script not fully implemented"
+          bash ./Scripts/migrate.sh "migration-test" || echo "⚠️  Migration script not fully implemented"
           
           echo "✅ Migration test passed"
