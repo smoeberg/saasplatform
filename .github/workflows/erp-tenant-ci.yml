@@ -39,13 +39,14 @@ jobs:
 
       - name: Install chart-testing
         run: |
-          # Install ctl (chart-testing)
-          curl -sSfL https://github.com/helm/chart-testing/releases/latest/download/chart-testing_3.14.0_linux_amd64.tar.gz | tar xz -C /usr/local/bin ct
+          # Install ctl (chart-testing) incl. bundled lintconf/chart_schema
+          curl -sSfL https://github.com/helm/chart-testing/releases/latest/download/chart-testing_3.14.0_linux_amd64.tar.gz -o /tmp/ct.tgz
+          sudo tar xzf /tmp/ct.tgz -C /usr/local
 
       - name: Lint Helm chart
         run: |
           cd Helm/erp-tenant
-          ct lint --chart-yaml-schema --validate-maintainers=false
+          ct lint --lint-conf /usr/local/etc/lintconf.yaml --chart-yaml-schema /usr/local/etc/chart_schema.yaml --validate-maintainers=false
 
       - name: Test Helm chart installation (dry-run)
         run: |
@@ -85,9 +86,10 @@ jobs:
 
   unit-test-scripts:
     name: Unit Test Scripts
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    
+    env:
+      STATUS_DIR: /tmp/saasplatform-status
+      VALUES_DIR: /tmp/saasplatform-values
+      DUMP_DIR: /tmp/saasplatform-dumps
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -100,7 +102,6 @@ jobs:
       - name: Test lib.sh functions
         run: |
           # Test INSTANCE resolution
-          sudo mkdir -p /var/lib/saasplatform
           source Scripts/lib.sh test-123
           echo "INSTANCE: $INSTANCE"
           echo "NAMESPACE: $NAMESPACE"
