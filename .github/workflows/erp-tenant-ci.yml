@@ -177,28 +177,28 @@ jobs:
         run: |
           mkdir -p /tmp/saasplatform-values
           cat > /tmp/saasplatform-values/tenant-test-123.yaml << 'EOF'
-instance: "test-123"
-domain: "test-123.tenants.example.com"
-suspended: false
-image:
-  repository: ghcr.io/smoeberg/dolibarr
-  tag: "23.0.1"
-db:
-  enabled: true
-  storage: 1Gi
-backup:
-  enabled: false
-  s3Enabled: false
-quota:
-  requestsCpu: "500m"
-  requestsMemory: 1Gi
-  limitsCpu: "1"
-  limitsMemory: 2Gi
-  pvc: "2"
-networkPolicy:
-  defaultDeny: true
-  egressMail: true
-EOF
+          instance: "test-123"
+          domain: "test-123.tenants.example.com"
+          suspended: false
+          image:
+            repository: ghcr.io/smoeberg/dolibarr
+            tag: "23.0.1"
+          db:
+            enabled: true
+            storage: 1Gi
+          backup:
+            enabled: false
+            s3Enabled: false
+          quota:
+            requestsCpu: "500m"
+            requestsMemory: 1Gi
+            limitsCpu: "1"
+            limitsMemory: 2Gi
+            pvc: "2"
+          networkPolicy:
+            defaultDeny: true
+            egressMail: true
+          EOF
 
       - name: Test deploy
         env:
@@ -330,26 +330,26 @@ EOF
         run: |
           # Deploy med version 23.0.1
           cat > /tmp/saasplatform-values/tenant-migration-test.yaml << 'EOF'
-instance: "migration-test"
-domain: "migration-test.tenants.example.com"
-suspended: false
-image:
-  repository: ghcr.io/smoeberg/dolibarr
-  tag: "23.0.1"
-dolibarr:
-  migration:
-    enabled: true
-    preMigrationSnapshot: ""
-db:
-  enabled: true
-  storage: 1Gi
-backup:
-  enabled: true
-  preMigration:
-    enabled: true
-    s3Enabled: true
-    bucket: "pre-migration-backups"
-EOF
+          instance: "migration-test"
+          domain: "migration-test.tenants.example.com"
+          suspended: false
+          image:
+            repository: ghcr.io/smoeberg/dolibarr
+            tag: "23.0.1"
+          dolibarr:
+            migration:
+              enabled: true
+              preMigrationSnapshot: ""
+          db:
+            enabled: true
+            storage: 1Gi
+          backup:
+            enabled: true
+            preMigration:
+              enabled: true
+              s3Enabled: true
+              bucket: "pre-migration-backups"
+          EOF
           
           export SELLYOURSAAS_INSTANCE_NAME="migration-test"
           export SELLYOURSAAS_DOLIBARRINSTANCE_URL="https://migration-test.tenants.example.com"
