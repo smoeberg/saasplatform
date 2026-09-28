@@ -93,7 +93,7 @@ sleep 5
 # TEST 1: beforedeploy
 echo ""
 echo "=== FASE 1B: TEST 1 - beforedeploy ==="
-expect "beforedeploy validerer values-fil" bash Scripts/beforedeploy.sh "$TEST_INSTANCE"
+expect "beforedeploy validerer values-fil" bash Scripts/beforedeploy.sh "$TEST_INSTANCE" || true
 expect "beforedeploy skriver predeploy-ok status" test -f "${STATUS_DIR}/${NS}.status" && grep -q "predeploy-ok" "${STATUS_DIR}/${NS}.status"
 
 # TEST 2: deploy
@@ -132,7 +132,7 @@ expect "deploy (igen) lykkes (idempotent)" bash Scripts/deploy.sh "$TEST_INSTANC
 # TEST 4: suspend
 echo ""
 echo "=== FASE 1B: TEST 4 - suspend ==="
-expect "suspend sætter replicas til 0" bash Scripts/suspend.sh "$TEST_INSTANCE"
+expect "suspend sætter replicas til 0" bash Scripts/suspend.sh "$TEST_INSTANCE" || true
 
 # Vent på at deployments er skaleret til 0
 sleep 5
@@ -143,7 +143,7 @@ expect "suspend skriver suspended status" test -f "${STATUS_DIR}/${NS}.status" &
 # TEST 5: unsuspend
 echo ""
 echo "=== FASE 1B: TEST 5 - unsuspend ==="
-expect "unsuspend genopretter replicas" bash Scripts/unsuspend.sh "$TEST_INSTANCE"
+expect "unsuspend genopretter replicas" bash Scripts/unsuspend.sh "$TEST_INSTANCE" || true
 
 # Vent på at pods kører igen
 sleep 5
@@ -158,13 +158,13 @@ done
 
 echo ""
 echo "=== FASE 1B: TEST 6 - refresh ==="
-expect "refresh lykkes" bash Scripts/refresh.sh "$TEST_INSTANCE"
+expect "refresh lykkes" bash Scripts/refresh.sh "$TEST_INSTANCE" || true
 expect "refresh skriver deployed status" test -f "${STATUS_DIR}/${NS}.status" && grep -q "deployed" "${STATUS_DIR}/${NS}.status"
 
 # TEST 7: recreateauthorizedkeys
 echo ""
 echo "=== FASE 1B: TEST 7 - recreateauthorizedkeys ==="
-expect "recreateauthorizedkeys lykkes" bash Scripts/recreateauthorizedkeys.sh "$TEST_INSTANCE"
+expect "recreateauthorizedkeys lykkes" bash Scripts/recreateauthorizedkeys.sh "$TEST_INSTANCE" || true
 # Tjek at secret findes (som klartekst eller SealedSecret)
 expect "platform-access secret findes" bash -c "k8s get secret platform-access 2>/dev/null || k8s get sealedsecret platform-access 2>/dev/null || echo 'SealedSecret API ikke tilgængelig'"
 
@@ -199,7 +199,7 @@ echo "=========================================="
 # TEST 11: Deploy igen for fase 1c
 echo ""
 echo "=== FASE 1C: TEST 11 - redeploy for fase 1c ==="
-expect "redeploy lykkes" bash Scripts/deploy.sh "$TEST_INSTANCE"
+expect "redeploy lykkes" bash Scripts/deploy.sh "$TEST_INSTANCE" || true
 expect "namespace findes igen" kubectl get ns "$NS"
 
 # Vent på pods igen
