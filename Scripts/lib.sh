@@ -210,7 +210,7 @@ dns_create() {
     done
     log "info" "DNS propagation bekraeftet for ${domain}"
   else
-    log "err" "DNS-record oprettelse fejlede for ${domain}: $(echo "$response" | jq -r '.errors[0].message // "ukendt fejl")"
+    log "err" "DNS-record oprettelse fejlede for ${domain}: $(echo "$response" | jq -r '.errors[0].message // "ukendt fejl"')"
     return 1
   fi
 }
@@ -246,7 +246,7 @@ dns_delete() {
   if [[ "$success" == "true" ]]; then
     log "info" "DNS-record slettet: ${domain}"
   else
-    log "err" "DNS-record sletning fejlede for ${domain}: $(echo "$response" | jq -r '.errors[0].message // "ukendt fejl")"
+    log "err" "DNS-record sletning fejlede for ${domain}: $(echo "$response" | jq -r '.errors[0].message // "ukendt fejl"')"
     return 1
   fi
 }
