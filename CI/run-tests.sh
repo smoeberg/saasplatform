@@ -9,7 +9,7 @@ set -euo pipefail
 
 # Konfiguration
 TEST_INSTANCE="test1"
-NS="tenant-${TEST_INSTANCE}"
+export NS="tenant-${TEST_INSTANCE}"
 CHART_DIR="${CHART_DIR:-./Helm/erp-tenant}"
 HEALTHZ_TIMEOUT=30
 
@@ -261,6 +261,36 @@ expect "rollback skriver rolled-back status" bash -c 'test -f "${STATUS_DIR}/${N
 # TEST 13: Restore tenant
 echo ""
 echo "=== FASE 1C: TEST 13 - restore tenant ==="
+
+# Undeploy loescht die Values-Datei (SieYourSaaS-verhalten); restore braucht sie aber,
+# deshalb hier neu rendern - gleicher Inhalt wie oben
+mkdir -p "${VALUES_DIR}"
+cat > "${VALUES_DIR}/${NS}.yaml" <<EOF
+instance: $TEST_INSTANCE
+domain: ${TEST_INSTANCE}.${TENANT_DOMAIN}
+image:
+  repository: ghcr.io/smoeberg/dolibarr
+  tag: 23.0.2
+suspended: false
+backup:
+  enabled: true
+  s3Enabled: false
+db:
+  enabled: true
+  storage: 1Gi
+  migration:
+    enabled: true
+    preMigrationSnapshot: "pre-migration-23.0.2-$(date +%Y%m%d%H%M%S)"
+quota:
+  requestsCpu: "500m"
+  requestsMemory: 1Gi
+  limitsCpu: "1"
+  limitsMemory: 2Gi
+  pvc: "2"
+networkPolicy:
+  defaultDeny: true
+  egressMail: true
+EOF
 
 # Slet namespace for at teste restore
 expect "namespace slettes for restore-test" bash Scripts/undeploy.sh "$TEST_INSTANCE" || true

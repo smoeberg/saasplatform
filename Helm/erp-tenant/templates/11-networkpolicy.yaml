@@ -63,7 +63,7 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-{{- if .Values.networkPolicy.egressMail -}}
+{{- if .Values.networkPolicy.egressMail }}
     # Allow mail (SMTP)
     - to:
         - ipBlock:
