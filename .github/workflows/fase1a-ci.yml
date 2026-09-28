@@ -56,7 +56,7 @@ jobs:
         run: |
           # Kør tests
           sudo SELLYOURSAAS_DB_ROOT_PASSWORD="${{ secrets.DB_ROOT_PASSWORD }}" \
-            ./CI/test-fase1a.sh
+            bash ./CI/test-fase1a.sh
 
   native-syntax-test:
     runs-on: ubuntu-latest
