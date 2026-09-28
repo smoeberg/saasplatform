@@ -67,14 +67,14 @@ jobs:
         run: |
           # Vent på clusteret er klar
           sleep 10
-          ./CI/run-tests.sh
+          bash ./CI/run-tests.sh
 
       - name: Run protocol tests (niveau 1)
         if: inputs.test-level == '1'
         run: |
           # Kør kun protokol-tests (uden k3d)
           # For nu: kør det samme som integration-test
-          ./CI/run-tests.sh || true
+          bash ./CI/run-tests.sh || true
 
   canary-test:
     needs: integration-test
@@ -137,7 +137,7 @@ jobs:
             export SELLYOURSAAS_INSTANCE_NAME="canary-test-${i}"
             export SELLYOURSAAS_DOLIBARRINSTANCE_URL="https://canary-test-${i}.kunder.saasplatform.test"
             export SELLYOURSAAS_VERSION="23.0.1"
-            ./Scripts/deploy.sh "canary-test-${i}" || true
+            bash ./Scripts/deploy.sh "canary-test-${i}" || true
           done
           
           sleep 30
@@ -145,7 +145,7 @@ jobs:
           # Kør canary-rollout
           export SELLYOURSAAS_VERSION="23.0.2"
           export CANARY_PERCENTAGE="20"  # 20% af 5 = 1 tenant
-          ./Scripts/canary-rollout.sh
+          bash ./Scripts/canary-rollout.sh
           
           # Verificer canary-rollout
           # Tjek at 1 tenant er opdateret til 23.0.2
@@ -209,7 +209,7 @@ jobs:
           export SELLYOURSAAS_INSTANCE_NAME="backup-test-1"
           export SELLYOURSAAS_DOLIBARRINSTANCE_URL="https://backup-test-1.kunder.saasplatform.test"
           export SELLYOURSAAS_VERSION="23.0.1"
-          ./Scripts/deploy.sh "backup-test-1" || true
+          bash ./Scripts/deploy.sh "backup-test-1" || true
           
           sleep 15
           
@@ -228,7 +228,7 @@ jobs:
       - name: Test restore
         run: |
           # Slet tenant
-          ./Scripts/undeploy.sh "backup-test-1" || true
+          bash ./Scripts/undeploy.sh "backup-test-1" || true
           
           sleep 5
           
