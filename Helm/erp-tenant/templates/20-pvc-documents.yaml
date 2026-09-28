@@ -13,6 +13,6 @@ spec:
   resources:
     requests:
       storage: 5Gi
-{{- if .Values.db.storageClass -}}
+{{- if .Values.db.storageClass }}
   storageClassName: {{ .Values.db.storageClass | quote }}
-{{- end -}}
+{{- end }}
