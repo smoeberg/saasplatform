@@ -128,7 +128,7 @@ spec:
             - name: backup
               emptyDir:
                 sizeLimit: 1Gi
-{{- end -}}
+{{- end }}
 
 ---
 {{- /* Pre-migration snapshot CronJob - only when migration is enabled and not suspended */ -}}
