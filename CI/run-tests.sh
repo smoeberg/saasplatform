@@ -94,7 +94,7 @@ sleep 5
 echo ""
 echo "=== FASE 1B: TEST 1 - beforedeploy ==="
 expect "beforedeploy validerer values-fil" bash Scripts/beforedeploy.sh "$TEST_INSTANCE" || true
-expect "beforedeploy skriver preflight-ok status" bash -c \'test -f "${STATUS_DIR}/${NS}.status" \&\& grep -q "preflight-ok" "${STATUS_DIR}/${NS}.status"\'
+expect "beforedeploy skriver preflight-ok status" bash -c 'test -f "${STATUS_DIR}/${NS}.status" && grep -q "preflight-ok" "${STATUS_DIR}/${NS}.status"'
 
 # TEST 2: deploy
 echo ""
@@ -138,7 +138,7 @@ expect "suspend sætter replicas til 0" bash Scripts/suspend.sh "$TEST_INSTANCE"
 sleep 5
 expect "dolibarr replicas=0" bash -c "[ \"\$(k8s get deploy dolibarr -o jsonpath='{.spec.replicas}' 2>/dev/null || echo '1')\" = '0' ]"
 expect "mariadb replicas=0" bash -c "[ \"\$(k8s get sts mariadb -o jsonpath='{.spec.replicas}' 2>/dev/null || echo '1')\" = '0' ]"
-expect "suspend skriver suspended status" bash -c \'test -f "${STATUS_DIR}/${NS}.status" \&\& grep -q "suspended" "${STATUS_DIR}/${NS}.status"\'
+expect "suspend skriver suspended status" bash -c 'test -f "${STATUS_DIR}/${NS}.status" && grep -q "suspended" "${STATUS_DIR}/${NS}.status"'
 
 # TEST 5: unsuspend
 echo ""
@@ -159,7 +159,7 @@ done
 echo ""
 echo "=== FASE 1B: TEST 6 - refresh ==="
 expect "refresh lykkes" bash Scripts/refresh.sh "$TEST_INSTANCE" || true
-expect "refresh skriver deployed status" bash -c \'test -f "${STATUS_DIR}/${NS}.status" \&\& grep -q "deployed" "${STATUS_DIR}/${NS}.status"\'
+expect "refresh skriver deployed status" bash -c 'test -f "${STATUS_DIR}/${NS}.status" && grep -q "deployed" "${STATUS_DIR}/${NS}.status"'
 
 # TEST 7: recreateauthorizedkeys
 echo ""
@@ -256,7 +256,7 @@ rollback:
 EOF
 
 expect "rollback genopretter til tidligere version" bash Scripts/rollback.sh "$TEST_INSTANCE" || true
-expect "rollback skriver rolled-back status" bash -c \'test -f "${STATUS_DIR}/${NS}.status" \&\& grep -q "rolled-back" "${STATUS_DIR}/${NS}.status"\'
+expect "rollback skriver rolled-back status" bash -c 'test -f "${STATUS_DIR}/${NS}.status" && grep -q "rolled-back" "${STATUS_DIR}/${NS}.status"'
 
 # TEST 13: Restore tenant
 echo ""
@@ -270,7 +270,7 @@ sleep 2
 
 # Restore tenant
 expect "restore lykkes" bash Scripts/restore-tenant.sh "$TEST_INSTANCE" || true
-expect "restore skriver restored status" bash -c \'test -f "${STATUS_DIR}/${NS}.status" \&\& grep -q "restored" "${STATUS_DIR}/${NS}.status"\'
+expect "restore skriver restored status" bash -c 'test -f "${STATUS_DIR}/${NS}.status" && grep -q "restored" "${STATUS_DIR}/${NS}.status"'
 
 # TEST 14: Secrets flow verification
 echo ""
