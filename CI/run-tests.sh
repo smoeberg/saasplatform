@@ -10,7 +10,7 @@ set -euo pipefail
 # Konfiguration
 TEST_INSTANCE="test1"
 NS="tenant-${TEST_INSTANCE}"
-CHART_DIR="${CHART_DIR:-./Helm}"
+CHART_DIR="${CHART_DIR:-./Helm/erp-tenant}"
 HEALTHZ_TIMEOUT=30
 
 # Tællere
