@@ -40,7 +40,7 @@ jobs:
       - name: Install chart-testing
         run: |
           # Install ctl (chart-testing)
-          curl -sSfL https://raw.githubusercontent.com/helm/chart-testing/main/install-ct.sh | sh -s -- -b /usr/local/bin
+          curl -sSfL https://github.com/helm/chart-testing/releases/latest/download/chart-testing_3.14.0_linux_amd64.tar.gz | tar xz -C /usr/local/bin ct
 
       - name: Lint Helm chart
         run: |
@@ -100,6 +100,7 @@ jobs:
       - name: Test lib.sh functions
         run: |
           # Test INSTANCE resolution
+          sudo mkdir -p /var/lib/saasplatform
           source Scripts/lib.sh test-123
           echo "INSTANCE: $INSTANCE"
           echo "NAMESPACE: $NAMESPACE"
