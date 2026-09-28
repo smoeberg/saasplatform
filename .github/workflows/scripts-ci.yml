@@ -49,4 +49,4 @@ jobs:
         run: |
           # Vent på clusteret er klar
           sleep 10
-          ./CI/run-tests.sh
+          bash ./CI/run-tests.sh
