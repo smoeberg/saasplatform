@@ -60,7 +60,7 @@ k3d cluster create saas-test --agents 2
 | Dokument | Beskrivelse | Status |
 |----------|-------------|--------|
 | [README](Fase1a/README.md) | Komplet installationsguide | ✅ |
-| [Installationstjekliste](Fase%201a%20Installationstjekliste.md) | Checkliste med exit-kriterier | ✅ |
+| [Installationstjekliste](Fase1a/Installationstjekliste.md) | Checkliste med exit-kriterier | ✅ |
 
 **Exit-kriterier:**
 - 10 fulde gennemløb

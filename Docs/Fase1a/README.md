@@ -425,7 +425,7 @@ sudo tail -f /var/log/php8.2-fpm-pim-test1.log
 ## Nste Skridt
 
 Nr fase 1a er frdig:
-1. G videre til [Fase 1b](../Fase%201b%20Installationstjekliste.md) - K8s-grundintegration
+1. G videre til [Fase 1b](../Fase1b/README.md) - K8s-grundintegration
 2. Verificer at alle exit-kriterier er opfyldt
 3. Dokumenter eventuelle issues
 

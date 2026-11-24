@@ -6,10 +6,11 @@ Platform til håndtering af SaaS-tenants: [SellYourSaaS](https://github.com/Doli
 
 | Fase | Beskrivelse | Status | Dokumentation |
 |------|-------------|--------|----------------|
-| **Fase 1a** | Native deployment (PIM) | ✅ Færdig | [Installationstjekliste](Docs/Fase%201a%20Installationstjekliste.md), [README](Docs/Fase1a/README.md) |
+| **Fase 1a** | Native deployment (PIM) | ✅ Færdig | [Installationstjekliste](Docs/Fase1a/Installationstjekliste.md), [README](Docs/Fase1a/README.md) |
 | **Fase 1b** | K8s grundintegration | ✅ Færdig | [Installationstjekliste](Docs/Fase1b/Installationstjekliste.md), [README](Docs/Fase1b/README.md), [Testplan](Docs/Fase1b/Testplan.md) |
 | **Fase 1c** | Livscyklus & gendannelse | ✅ Færdig | [Installationstjekliste](Docs/Fase1c/Installationstjekliste.md), [README](Docs/Fase1c/README.md), [Testplan](Docs/Fase1c/Testplan.md) |
-| **Fase 2** | Produktion | ⏳ Ikke startet | [Produktions-opsætningsguide](Docs/Fase2/README.md), [Produktions-opsætningsguide](Docs/Fase2/Produktions-ops%C3%A6tningsguide.md) |
+| **Fase 2** | Produktion | ⏳ Ikke startet | [README](Docs/Fase2/README.md), [Produktions-opsætningsguide](Docs/Fase2/Produktions-ops%C3%A6tningsguide.md), [Installationstjekliste](Docs/Fase2/Installationstjekliste.md), [Testplan](Docs/Fase2/Testplan.md) |
+| **Fase 3** | Skalering, HA & disaster recovery | ⏳ Ikke startet | [README](Docs/Fase3/README.md), [Installationstjekliste](Docs/Fase3/Installationstjekliste.md), [Testplan](Docs/Fase3/Testplan.md), [Disaster Recovery](Docs/Fase3/Disaster-Recovery.md) |
 
 **Se også:**
 - [📖 Dokumentationsindex](Docs/README.md) - Komplet oversigt over al dokumentation
@@ -57,8 +58,8 @@ k3d cluster create saas-test --agents 2 --ports '80:80@loadbalancer' --ports '44
 # Konfigurer miljø
 kubectl config use-context your-cluster
 
-# Installer afhængigheder
-./Infrastructure/k3s/setup.sh
+# Installer afhængigheder (Traefik, cert-manager, Velero m.fl.)
+# Se: Infrastructure/k3s/README.md og Infrastructure/velero/README.md
 
 # Deploy test-tenant
 ./Scripts/deploy.sh test-01
@@ -77,10 +78,11 @@ kubectl config use-context your-cluster
 
 ### For produktion
 
-- [ ] Fase 1a: Native deployment ✅
-- [ ] Fase 1b: K8s grundintegration ✅
-- [ ] Fase 1c: Livscyklus & gendannelse ✅
+- [x] Fase 1a: Native deployment
+- [x] Fase 1b: K8s grundintegration
+- [x] Fase 1c: Livscyklus & gendannelse
 - [ ] **Fase 2:** Produktionsopsætning (næste prioritet)
+- [ ] Fase 3: Skalering, HA & disaster recovery
 
 ---
 
