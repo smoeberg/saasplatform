@@ -184,6 +184,9 @@ jobs:
           sudo mv velero-v1.12.0-linux-amd64/velero /usr/local/bin/
           rm -rf velero-v1.12.0-linux-amd64 velero-v1.12.0-linux-amd64.tar.gz
           
+          # Dummy-credentials til S3-mock (den rigtige fil er gitignored)
+          printf '[default]\naws_access_key_id = ci-dummy\naws_secret_access_key = ci-dummy\n' > ./Infrastructure/velero/velero-credentials
+
           # Installer Velero i clusteret
           velero install \
             --provider aws \

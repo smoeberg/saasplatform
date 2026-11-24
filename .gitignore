@@ -3,3 +3,8 @@
 kubeconfig*
 .env
 *.tar.gz
+
+# Hemmeligheder — commit aldrig
+Infrastructure/velero/velero-credentials
+*-credentials
+!*-credentials.example

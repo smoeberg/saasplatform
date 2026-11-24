@@ -53,7 +53,7 @@ kubectl get deployment -n velero velero
 
 ### 3. Konfigurer credentials
 
-Opret filen `Infrastructure/velero/velero-credentials`:
+Opret filen `Infrastructure/velero/velero-credentials` ud fra skabelonen (`cp velero-credentials.example velero-credentials`). Filen er gitignored og må aldrig committes:
 
 ```ini
 [default]
